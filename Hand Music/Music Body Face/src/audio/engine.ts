@@ -76,6 +76,9 @@ interface SampleInfo {
 // Samples grouped by (group -> octave)
 let samplesByGroupAndOctave: Map<SampleGroup, Map<number, SampleInfo[]>> = new Map();
 let sortedOctavesByGroup: Map<SampleGroup, number[]> = new Map();
+// Flattened, sorted sample lists for deterministic pitch mapping
+let samplesByGroupSorted: Map<SampleGroup, SampleInfo[]> = new Map();
+let brassSamplesByGroupAndLayerSorted: Map<string, SampleInfo[]> = new Map();
 let samplesLoaded = false;
 
 /**
@@ -200,6 +203,25 @@ async function loadSampleManifest(): Promise<void> {
         samples.sort((a, b) => a.midiNote - b.midiNote);
       }
     }
+
+    // Build flattened, sorted lists (for mapping hand Y -> closest pitch)
+    samplesByGroupSorted = new Map();
+    brassSamplesByGroupAndLayerSorted = new Map();
+
+    for (const [group, groupMap] of samplesByGroupAndOctave.entries()) {
+      const flat: SampleInfo[] = Array.from(groupMap.values()).flat();
+      flat.sort((a, b) => a.midiNote - b.midiNote);
+      samplesByGroupSorted.set(group, flat);
+
+      if (group.startsWith("brass:")) {
+        for (const layer of ["soft", "medium", "hard"] as const) {
+          const layered = flat.filter((s) => s.layer === layer);
+          const key = `${group}:${layer}`;
+          // If a layer is missing (shouldn't happen), fall back to all samples.
+          brassSamplesByGroupAndLayerSorted.set(key, layered.length > 0 ? layered : flat);
+        }
+      }
+    }
     
     samplesLoaded = true;
   } catch (err) {
@@ -209,49 +231,65 @@ async function loadSampleManifest(): Promise<void> {
 
 /**
  * Get a sample based on hand Y position and articulation layer.
- * Maps hand position to OCTAVE first for dramatic pitch differences,
- * then filters by layer (soft/medium/hard based on movement jerkiness),
- * then picks randomly within that subset.
+ * Maps hand position to a TARGET PITCH, then picks the closest sample pitch.
+ * handY is normalized screen Y: 0 = top (highest pitch), 1 = bottom (lowest pitch).
  */
 function getSampleByPitchGroupAndLayer(handY: number, group: SampleGroup, layer: ArticulationLayer): string {
-  const groupOctaves = sortedOctavesByGroup.get(group) ?? [];
-  const groupMap = samplesByGroupAndOctave.get(group);
+  const clamp01 = (v: number) => Math.max(0, Math.min(1, v));
+  const pitchPosition = 1 - clamp01(handY); // 0 = lowest, 1 = highest
 
-  if (!groupMap || groupOctaves.length === 0) {
+  const candidates =
+    group.startsWith("brass:")
+      ? (brassSamplesByGroupAndLayerSorted.get(`${group}:${layer}`) ?? [])
+      : (samplesByGroupSorted.get(group) ?? []);
+
+  if (candidates.length === 0) {
     // Fallbacks (must exist locally)
     if (group === "strings:cello") return "/audio/Cello Soft/Cello softC3.wav";
     if (group === "strings:viola") return "/audio/Viola Soft/Viola Soft C4.wav";
     return "/audio/Trombone/Standard/Medium Layer/TB Med A3.wav";
   }
   
-  // Invert Y: 0 (top of screen/high hand) = high pitch, 1 (bottom/low hand) = low pitch
-  const pitchPosition = 1 - handY;
-  
-  // Map position to octave index
-  // pitchPosition 0 = lowest octave, 1 = highest octave
-  const octaveIndex = Math.floor(pitchPosition * groupOctaves.length);
-  const clampedIndex = Math.max(0, Math.min(groupOctaves.length - 1, octaveIndex));
-  const targetOctave = groupOctaves[clampedIndex];
-  
-  // Get samples in this octave
-  const octaveSamples = groupMap.get(targetOctave) ?? [];
-  if (octaveSamples.length === 0) {
-    // Shouldn't happen if our indices are consistent, but keep it safe.
-    return "/audio/Trombone/Standard/Medium Layer/TB Med A3.wav";
+  const minMidi = candidates[0].midiNote;
+  const maxMidi = candidates[candidates.length - 1].midiNote;
+  const targetMidi = Math.round(minMidi + pitchPosition * (maxMidi - minMidi));
+
+  // Binary search for insertion point
+  let lo = 0;
+  let hi = candidates.length - 1;
+  while (lo <= hi) {
+    const mid = (lo + hi) >> 1;
+    const m = candidates[mid].midiNote;
+    if (m === targetMidi) {
+      lo = mid;
+      break;
+    }
+    if (m < targetMidi) lo = mid + 1;
+    else hi = mid - 1;
   }
-  
-  // Filter by layer
-  let layerSamples = octaveSamples;
-  if (group.startsWith("brass:")) {
-    layerSamples = octaveSamples.filter((s: SampleInfo) => s.layer === layer);
-    if (layerSamples.length === 0) layerSamples = octaveSamples;
-  }
-  
-  // Pick a random sample from filtered set
-  const randomIndex = Math.floor(Math.random() * layerSamples.length);
-  const sample = layerSamples[randomIndex];
-  
-  return sample.path;
+
+  const rightIdx = Math.min(Math.max(lo, 0), candidates.length - 1);
+  const leftIdx = Math.max(rightIdx - 1, 0);
+
+  const leftMidi = candidates[leftIdx].midiNote;
+  const rightMidi = candidates[rightIdx].midiNote;
+  const leftDist = Math.abs(leftMidi - targetMidi);
+  const rightDist = Math.abs(rightMidi - targetMidi);
+
+  const chosenMidi =
+    leftDist < rightDist ? leftMidi :
+    rightDist < leftDist ? rightMidi :
+    // Tie: pick either side (adds tiny variety but same pitch neighborhood)
+    (Math.random() < 0.5 ? leftMidi : rightMidi);
+
+  // If multiple samples share the same pitch, pick one at random among them.
+  let start = leftIdx;
+  while (start > 0 && candidates[start - 1].midiNote === chosenMidi) start--;
+  let end = rightIdx;
+  while (end < candidates.length - 1 && candidates[end + 1].midiNote === chosenMidi) end++;
+
+  const pickIdx = start + Math.floor(Math.random() * (end - start + 1));
+  return candidates[pickIdx].path;
 }
 
 // Loop point percentages (of total duration) - tighter loop region

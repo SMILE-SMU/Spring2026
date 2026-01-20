@@ -401,8 +401,10 @@ export function drawLandmarks(
     ctx.fillStyle = "#ffffff22";
     ctx.fillRect(barX - 5, barTop, 10, barHeight);
     
-    // Position indicator
-    const indicatorY = barTop + (1 - hand.bodyRelativeY) * barHeight;
+    // Position indicator (screen-space wrist Y: 0 = top, 1 = bottom)
+    const wristY = hand.landmarks[HAND.WRIST]?.y ?? 0.5;
+    const clampedWristY = Math.max(0, Math.min(1, wristY));
+    const indicatorY = barTop + clampedWristY * barHeight;
     ctx.fillStyle = color;
     ctx.beginPath();
     ctx.arc(barX, indicatorY, 8, 0, Math.PI * 2);

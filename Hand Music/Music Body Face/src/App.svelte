@@ -17,6 +17,7 @@
   let isLoading = $state(false);
   let trackerReady = $state(false);
   let performanceMode = $state(false); // Lighter tracking for slower computers
+  let singleHandMode = $state(false); // Limit instrument to one hand (default: 2 hands)
   let frameCount = 0; // For frame skipping in performance mode
   let instrumentMode: InstrumentMode = $state("brass");
 
@@ -70,6 +71,33 @@
     "Left": createHandState(),
     "Right": createHandState(),
   };
+
+  // If toggled while running, reset state to avoid stuck notes.
+  let prevSingleHandMode = $state(false);
+  let hasPrevSingleHandMode = $state(false);
+  $effect(() => {
+    const current = singleHandMode;
+    if (!hasPrevSingleHandMode) {
+      prevSingleHandMode = current;
+      hasPrevSingleHandMode = true;
+      return;
+    }
+    if (prevSingleHandMode === current) return;
+    prevSingleHandMode = current;
+
+    if (!isRunning) return;
+
+    console.log(`Single hand mode ${current ? "enabled" : "disabled"} (resetting)`);
+    audioComponent1?.release();
+    audioComponent2?.release();
+    audioParams1 = { pitchShift: 0, gain: 0, filterCutoff: 1, delayTime: 0, feedback: 0 };
+    audioParams2 = { pitchShift: 0, gain: 0, filterCutoff: 1, delayTime: 0, feedback: 0 };
+    handStates = {
+      "Left": createHandState(),
+      "Right": createHandState(),
+    };
+    debugInfo = "";
+  });
 
   // Thresholds and smoothing (higher = more responsive, lower latency)
   const PITCH_SMOOTHING = 0.3; // Fast pitch response
@@ -225,7 +253,8 @@
     }
     
     // Update hand Y position for pitch-based sample selection
-    const handYForPitch = 1 - hand.bodyRelativeY;
+    // Use screen-space Y (0 = top, 1 = bottom) so top selects highest pitches.
+    const handYForPitch = wrist.y;
     audioComp?.updateHandY(handYForPitch);
     
     // Calculate pitch shift
@@ -300,17 +329,29 @@
   }
 
   function handleTrackingResult(result: TrackingResult, timestamp: number): void {
-    // Draw landmarks on canvas
+    // In single-hand mode, pick only one detected hand to drive audio.
+    // Prefer Right if both are present (more common for users).
+    const activeHands = singleHandMode
+      ? (() => {
+          if (result.hands.length <= 1) return result.hands;
+          const right = result.hands.find((h) => h.handedness === "Right");
+          return [right ?? result.hands[0]];
+        })()
+      : result.hands;
+
+    const selectedHandedness = singleHandMode ? (activeHands[0]?.handedness ?? null) : null;
+
+    // Draw landmarks on canvas (only the active hand(s) in single-hand mode)
     const ctx = videoComponent?.getContext();
     if (ctx) {
-      drawLandmarks(ctx, result);
+      drawLandmarks(ctx, singleHandMode ? { ...result, hands: activeHands } : result);
     }
 
-    // Track which hands are currently detected
-    const detectedHandedness = new Set(result.hands.map(h => h.handedness));
+    // Track which hands are currently detected (after filtering for single-hand mode)
+    const detectedHandedness = new Set(activeHands.map(h => h.handedness));
     
     // Process each detected hand independently
-    for (const hand of result.hands) {
+    for (const hand of activeHands) {
       const state = handStates[hand.handedness];
       const audioComp = hand.handedness === "Left" ? audioComponent1 : audioComponent2;
       
@@ -328,6 +369,35 @@
       if (!detectedHandedness.has(handedness)) {
         const state = handStates[handedness];
         const audioComp = handedness === "Left" ? audioComponent1 : audioComponent2;
+
+        // In single-hand mode, force the non-selected hand to be fully silent/idle.
+        if (singleHandMode && handedness !== selectedHandedness) {
+          if (state.wasPlaying || state.isInRelease) {
+            audioComp?.release();
+          }
+          state.wasPlaying = false;
+          state.isInRelease = false;
+          state.releaseStartTime = 0;
+          state.smoothedVelocity *= 0.9;
+          state.smoothedPalmRotation *= 0.95;
+          state.smoothedOpenness = 0;
+          state.prevHandPos = null;
+
+          const params: AudioParams = {
+            pitchShift: handedness === "Left" ? audioParams1.pitchShift : audioParams2.pitchShift,
+            gain: 0,
+            filterCutoff: 1,
+            delayTime: 0,
+            feedback: state.smoothedPalmRotation,
+          };
+
+          if (handedness === "Left") {
+            audioParams1 = params;
+          } else {
+            audioParams2 = params;
+          }
+          continue;
+        }
         
         // Trigger release if was playing
         if (state.wasPlaying) {
@@ -385,7 +455,7 @@
 
 <main>
   <header>
-    <h1>Music Body Face</h1>
+    <h1>Hand Music</h1>
     <p class="status">
       {#if isLoading}
         Loading...
@@ -398,30 +468,34 @@
   </header>
 
   <section class="controls">
-    {#if !isRunning}
-      <div class="control-row">
+    <div class="control-row">
+      {#if !isRunning}
         <button onclick={handleStart} disabled={isLoading}>
           {isLoading ? "Loading..." : "Start"}
         </button>
-        <button onclick={toggleInstrumentMode} disabled={isLoading}>
-          Mode: {instrumentMode === "brass" ? "Brass (Trombone)" : "Strings (Cello/Viola)"}
-        </button>
-      </div>
+      {:else}
+        <button onclick={handleStop}>Stop</button>
+      {/if}
+
+      <button onclick={toggleInstrumentMode} disabled={isLoading}>
+        Mode: {instrumentMode === "brass" ? "Brass (Trombone)" : "Strings (Cello/Viola)"}
+      </button>
+    </div>
+
+    <label class="toggle-label">
+      <input type="checkbox" bind:checked={singleHandMode} disabled={isLoading} />
+      <span>Single hand mode</span>
+      <span class="hint">(only one hand controls the instrument)</span>
+    </label>
+
+    {#if !isRunning}
       <label class="toggle-label">
         <input type="checkbox" bind:checked={performanceMode} />
         <span>Performance Mode</span>
         <span class="hint">(for slower computers - disables body tracking)</span>
       </label>
-    {:else}
-      <div class="control-row">
-        <button onclick={handleStop}>Stop</button>
-        <button onclick={toggleInstrumentMode}>
-          Mode: {instrumentMode === "brass" ? "Brass (Trombone)" : "Strings (Cello/Viola)"}
-        </button>
-      </div>
-      {#if performanceMode}
-        <span class="mode-indicator">⚡ Performance Mode</span>
-      {/if}
+    {:else if performanceMode}
+      <span class="mode-indicator">⚡ Performance Mode</span>
     {/if}
   </section>
 
