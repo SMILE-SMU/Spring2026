@@ -3,7 +3,7 @@
    * Audio component using Tone.js with attack-sustain-release
    */
 
-  import type { AudioEngine, AudioParams, InstrumentMode } from "../audio/engine";
+  import type { AudioEngine, AudioParams, InstrumentMode, PitchMode } from "../audio/engine";
   import {
     createAudioEngine,
     startAudio,
@@ -16,6 +16,7 @@
     setHandY,
     setLayer,
     setInstrumentMode,
+    setPitchMode,
   } from "../audio/engine";
 
   interface Props {
@@ -64,6 +65,10 @@
 
   export function setMode(mode: InstrumentMode): void {
     setInstrumentMode(engine, mode);
+  }
+
+  export function setPitch(mode: PitchMode): void {
+    setPitchMode(engine, mode);
   }
 
   // React to param changes

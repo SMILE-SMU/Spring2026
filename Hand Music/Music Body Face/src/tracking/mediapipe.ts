@@ -28,6 +28,23 @@ export interface TrackingResult {
   poseLandmarks: Landmark[] | null;
 }
 
+export interface TrailPoint {
+  x: number; // normalized 0-1
+  y: number; // normalized 0-1
+  width: number; // pixels
+}
+
+export interface HandTrail {
+  handedness: "Left" | "Right";
+  points: TrailPoint[];
+  color: string; // any valid canvas strokeStyle
+  alpha: number; // 0-1
+}
+
+export interface DrawOverlays {
+  trails?: HandTrail[];
+}
+
 export interface Tracker {
   handLandmarker: HandLandmarker | null;
   poseLandmarker: PoseLandmarker | null;
@@ -283,7 +300,8 @@ export function processFrame(
 
 export function drawLandmarks(
   ctx: CanvasRenderingContext2D,
-  result: TrackingResult
+  result: TrackingResult,
+  overlays?: DrawOverlays
 ): void {
   const { width, height } = ctx.canvas;
   ctx.clearRect(0, 0, width, height);
@@ -324,6 +342,36 @@ export function drawLandmarks(
         ctx.arc(lm.x * width, lm.y * height, 6, 0, Math.PI * 2);
         ctx.fill();
       }
+    }
+  }
+
+  // Draw hand-movement trails (per-note)
+  if (overlays?.trails && overlays.trails.length > 0) {
+    for (const trail of overlays.trails) {
+      if (!trail.points || trail.points.length < 2) continue;
+      if (trail.alpha <= 0) continue;
+
+      ctx.save();
+      ctx.globalAlpha = Math.max(0, Math.min(1, trail.alpha));
+      ctx.strokeStyle = trail.color;
+      ctx.lineCap = "round";
+      ctx.lineJoin = "round";
+      ctx.shadowColor = trail.color;
+      ctx.shadowBlur = 12;
+
+      // Vary thickness by stroking each segment separately.
+      for (let i = 1; i < trail.points.length; i++) {
+        const a = trail.points[i - 1];
+        const b = trail.points[i];
+        const segmentWidth = Math.max(1, (a.width + b.width) / 2);
+        ctx.lineWidth = segmentWidth;
+        ctx.beginPath();
+        ctx.moveTo(a.x * width, a.y * height);
+        ctx.lineTo(b.x * width, b.y * height);
+        ctx.stroke();
+      }
+
+      ctx.restore();
     }
   }
 
@@ -401,9 +449,18 @@ export function drawLandmarks(
     ctx.fillStyle = "#ffffff22";
     ctx.fillRect(barX - 5, barTop, 10, barHeight);
     
-    // Position indicator (screen-space wrist Y: 0 = top, 1 = bottom)
-    const wristY = hand.landmarks[HAND.WRIST]?.y ?? 0.5;
-    const clampedWristY = Math.max(0, Math.min(1, wristY));
+    // Position indicator (screen-space palm center Y: 0 = top, 1 = bottom)
+    const wrist = hand.landmarks[HAND.WRIST];
+    const indexMcp = hand.landmarks[HAND.INDEX_MCP];
+    const middleMcp = hand.landmarks[HAND.MIDDLE_MCP];
+    const ringMcp = hand.landmarks[HAND.RING_MCP];
+    const pinkyMcp = hand.landmarks[HAND.PINKY_MCP];
+    const pts = [wrist, indexMcp, middleMcp, ringMcp, pinkyMcp].filter(Boolean) as Landmark[];
+    let palmY = 0.5;
+    if (pts.length > 0) {
+      palmY = pts.reduce((sum, p) => sum + p.y, 0) / pts.length;
+    }
+    const clampedWristY = Math.max(0, Math.min(1, palmY));
     const indicatorY = barTop + clampedWristY * barHeight;
     ctx.fillStyle = color;
     ctx.beginPath();
