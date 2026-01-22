@@ -8,6 +8,9 @@ import * as Tone from "tone";
 // Debug logging (set to false to silence)
 const DEBUG_AUDIO = true;
 
+// Reverb enable (tied to visual trail length mapping in App)
+const ENABLE_REVERB = true;
+
 // Stable IDs for engines + source nodes for readable logs
 let nextEngineId = 1;
 const engineIds = new WeakMap<object, number>();
@@ -81,7 +84,9 @@ export interface AudioEngine {
   pitchShift: Tone.PitchShift | null;
   filter: Tone.Filter | null; // Lowpass filter for wah effect
   delay: Tone.FeedbackDelay | null; // Feedback delay for echo effect
-  gain: Tone.Gain | null;
+  reverb: Tone.Reverb | null;
+  gain: Tone.Gain | null; // dry gain (note amplitude)
+  wetGain: Tone.Gain | null; // wet gain (reverb level, not tied to dry)
   limiter: Tone.Limiter | null;
   volume: Tone.Volume | null;
   isRunning: boolean;
@@ -98,6 +103,9 @@ export interface AudioEngine {
   instrumentMode: InstrumentMode; // brass (trombone) or strings (cello/viola)
   currentGroup: SampleGroup; // which sample group the currently loaded buffer came from
   pitchMode: PitchMode; // low/mid/high pitch mapping bands
+  lastReverbDecay: number; // seconds
+  lastReverbUpdateAt: number; // Tone.now() seconds
+  isReverbGenerating: boolean;
 }
 
 export interface AudioParams {
@@ -106,6 +114,8 @@ export interface AudioParams {
   filterCutoff: number; // 0-1, maps to frequency range for wah effect
   delayTime: number; // 0-1, maps to delay time (0 = no delay, 1 = max delay)
   feedback: number; // 0-1, maps to feedback amount
+  reverbMix: number; // 0-0.75 (wet)
+  reverbDecay: number; // seconds (tail length), typically <= 6
 }
 
 // Sample categories to pick from
@@ -617,7 +627,9 @@ export function createAudioEngine(): AudioEngine {
     pitchShift: null,
     filter: null,
     delay: null,
+    reverb: null,
     gain: null,
+    wetGain: null,
     limiter: null,
     volume: null,
     isRunning: false,
@@ -634,6 +646,9 @@ export function createAudioEngine(): AudioEngine {
     instrumentMode: "brass",
     currentGroup: "brass:trombone",
     pitchMode: "mid",
+    lastReverbDecay: 1,
+    lastReverbUpdateAt: 0,
+    isReverbGenerating: false,
   };
 }
 
@@ -648,12 +663,25 @@ export async function startAudio(engine: AudioEngine): Promise<void> {
   // Load sample manifest for pitch-based selection
   await loadSampleManifest();
 
-  // Create output chain: sources -> pitchShift -> filter -> delay -> gain -> volume -> limiter -> dest
+  // Create output chain:
+  // sources -> pitchShift -> filter -> dryGain -> volume -> limiter -> dest
+  // and optionally filter -> reverb(100% wet) -> wetGain -> volume
   // Limiter at -3dB gives more headroom and less aggressive limiting
   const limiter = new Tone.Limiter(-3).toDestination();
   // Reduced volume boost (was +12dB) - with two hands playing, this prevents summing distortion
   const volume = new Tone.Volume(6).connect(limiter);
-  const gain = new Tone.Gain(0).connect(volume);
+  const dryGain = new Tone.Gain(0).connect(volume);
+  const wetGain = ENABLE_REVERB ? new Tone.Gain(0).connect(volume) : null;
+  const reverb = ENABLE_REVERB
+    ? new Tone.Reverb({
+        decay: 1,
+        preDelay: 0.01,
+        wet: 1, // fully wet; mix handled by wetGain
+      }).connect(wetGain!)
+    : null;
+  if (ENABLE_REVERB) {
+    await reverb!.generate();
+  }
   
   // Feedback delay for echo effect (DISABLED for now)
   const delay = new Tone.FeedbackDelay({
@@ -661,19 +689,24 @@ export async function startAudio(engine: AudioEngine): Promise<void> {
     feedback: 0, // Feedback disabled - no repeating echoes
     wet: 0, // DISABLED - set to 0 to bypass delay
     maxDelay: DELAY_MAX_TIME + 0.5, // Buffer for max delay
-  }).connect(gain);
+  }).connect(dryGain);
   
-  // Lowpass filter for wah effect - connect directly to gain, bypassing delay
+  // Lowpass filter for wah effect - feed both dry + reverb
   const filter = new Tone.Filter({
     type: "lowpass",
     frequency: FILTER_MAX_FREQ, // Start open
     Q: FILTER_Q,
     rolloff: -24, // Steeper rolloff for more pronounced effect
-  }).connect(gain); // Bypass delay for now
+  });
+  filter.connect(dryGain); // bypass delay for now
+  if (ENABLE_REVERB) {
+    filter.connect(reverb!);
+  }
   
   const pitchShift = new Tone.PitchShift({
     pitch: 0,
-    windowSize: 0.03, // Reduced from 0.05 for less latency
+    // Slightly larger window for smoother pitch modulation (less glitchy vibrato)
+    windowSize: 0.05,
     delayTime: 0,
   }).connect(filter);
 
@@ -693,12 +726,17 @@ export async function startAudio(engine: AudioEngine): Promise<void> {
   engine.pitchShift = pitchShift;
   engine.filter = filter;
   engine.delay = delay;
-  engine.gain = gain;
+  engine.reverb = reverb;
+  engine.gain = dryGain;
+  engine.wetGain = wetGain;
   engine.limiter = limiter;
   engine.volume = volume;
   engine.sourceGain1 = sourceGain1;
   engine.sourceGain2 = sourceGain2;
   engine.isRunning = true;
+  engine.lastReverbDecay = 1;
+  engine.lastReverbUpdateAt = Tone.now();
+  engine.isReverbGenerating = false;
 
   // Load initial sample
   await loadNewSample(engine);
@@ -772,7 +810,9 @@ export function stopAudio(engine: AudioEngine): void {
   
   engine.pitchShift?.dispose();
   engine.filter?.dispose();
+  engine.reverb?.dispose();
   engine.gain?.dispose();
+  engine.wetGain?.dispose();
   engine.volume?.dispose();
   engine.limiter?.dispose();
   engine.sourceGain1?.disconnect();
@@ -781,7 +821,9 @@ export function stopAudio(engine: AudioEngine): void {
   engine.buffer = null;
   engine.pitchShift = null;
   engine.filter = null;
+  engine.reverb = null;
   engine.gain = null;
+  engine.wetGain = null;
   engine.volume = null;
   engine.limiter = null;
   engine.sourceGain1 = null;
@@ -1202,10 +1244,10 @@ export function triggerRelease(engine: AudioEngine): void {
 export function updateAudioParams(engine: AudioEngine, params: AudioParams): void {
   if (!engine.isRunning || !engine.gain) return;
 
-  // Pitch shift disabled for now
-  // if (engine.pitchShift) {
-  //   engine.pitchShift.pitch = params.pitchShift;
-  // }
+  // Pitch shift (used for velocity-driven vibrato)
+  if (engine.pitchShift) {
+    engine.pitchShift.pitch = params.pitchShift;
+  }
 
   // Update gain - fast ramp for responsive volume
   engine.gain.gain.rampTo(params.gain, 0.005);
@@ -1220,6 +1262,32 @@ export function updateAudioParams(engine: AudioEngine, params: AudioParams): voi
   if (engine.delay && engine.delay.wet.value > 0) {
     const delayTime = DELAY_MIN_TIME + Math.pow(params.delayTime, 3) * (DELAY_MAX_TIME - DELAY_MIN_TIME);
     engine.delay.delayTime.rampTo(delayTime, 0.1);
+  }
+
+  // Update reverb (mix + tail length)
+  if (ENABLE_REVERB && engine.reverb && engine.wetGain) {
+    const wet = Math.max(0, Math.min(0.75, params.reverbMix));
+    engine.wetGain.gain.rampTo(wet, 0.05);
+
+    // Updating decay regenerates the impulse response; throttle to avoid heavy work.
+    const desiredDecay = Math.max(0.1, Math.min(10, params.reverbDecay));
+    const now = Tone.now();
+    const shouldUpdateDecay =
+      Math.abs(desiredDecay - engine.lastReverbDecay) > 0.25 &&
+      (now - engine.lastReverbUpdateAt) > 0.25 &&
+      !engine.isReverbGenerating;
+
+    if (shouldUpdateDecay) {
+      engine.lastReverbDecay = desiredDecay;
+      engine.lastReverbUpdateAt = now;
+      engine.isReverbGenerating = true;
+      engine.reverb.decay = desiredDecay;
+      engine.reverb.generate()
+        .catch(() => {})
+        .finally(() => {
+          engine.isReverbGenerating = false;
+        });
+    }
   }
 }
 
