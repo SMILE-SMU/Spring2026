@@ -152,6 +152,10 @@
     Right: createTrailState(),
   };
 
+  // In single-hand mode, Mediapipe can occasionally flip handedness labels during fast motion.
+  // Latch to the previously-used engine to prevent audio dropouts/switching.
+  let singleHandLatched: Handedness | null = $state(null);
+
   function startTrail(handedness: Handedness, screenY: number): void {
     trails[handedness] = {
       phase: "active",
@@ -279,6 +283,7 @@
       "Left": createHandState(),
       "Right": createHandState(),
     };
+    singleHandLatched = null;
     debugInfo = "";
   });
 
@@ -375,6 +380,7 @@
       "Left": createHandState(),
       "Right": createHandState(),
     };
+    singleHandLatched = null;
     frameCount = 0;
     isRunning = false;
   }
@@ -687,28 +693,44 @@
 
   function handleTrackingResult(result: TrackingResult, timestamp: number): void {
     // In single-hand mode, pick only one detected hand to drive audio.
-    // Prefer Right if both are present (more common for users).
-    const activeHands = singleHandMode
-      ? (() => {
-          if (result.hands.length <= 1) return result.hands;
-          const right = result.hands.find((h) => h.handedness === "Right");
-          return [right ?? result.hands[0]];
-        })()
-      : result.hands;
+    // Prefer Right if both are present (more common for users), but latch the engine hand
+    // to prevent dropouts when Mediapipe flips handedness during fast motion.
+    let activeHands: HandData[] = result.hands;
+    let selectedHandedness: Handedness | null = null;
+    if (singleHandMode) {
+      if (result.hands.length === 0) {
+        activeHands = [];
+        selectedHandedness = singleHandLatched;
+      } else if (result.hands.length === 1) {
+        activeHands = [result.hands[0]];
+        selectedHandedness = singleHandLatched ?? result.hands[0].handedness;
+        singleHandLatched = selectedHandedness;
+      } else {
+        const right = result.hands.find((h) => h.handedness === "Right");
+        const chosen = right ?? result.hands[0];
+        activeHands = [chosen];
+        selectedHandedness = chosen.handedness;
+        singleHandLatched = selectedHandedness;
+      }
+    }
 
-    const selectedHandedness = singleHandMode ? (activeHands[0]?.handedness ?? null) : null;
-
-    // Track which hands are currently detected (after filtering for single-hand mode)
-    const detectedHandedness = new Set(activeHands.map(h => h.handedness));
+    // Track which engines/hands are currently driving audio (after single-hand latching)
+    const detectedHandedness = new Set<Handedness>();
+    if (singleHandMode) {
+      if (activeHands.length > 0 && selectedHandedness) detectedHandedness.add(selectedHandedness);
+    } else {
+      for (const h of activeHands) detectedHandedness.add(h.handedness);
+    }
     
     // Process each detected hand independently
     for (const hand of activeHands) {
-      const state = handStates[hand.handedness];
-      const audioComp = hand.handedness === "Left" ? audioComponent1 : audioComponent2;
+      const controllerHandedness: Handedness = singleHandMode ? (selectedHandedness ?? hand.handedness) : hand.handedness;
+      const state = handStates[controllerHandedness];
+      const audioComp = controllerHandedness === "Left" ? audioComponent1 : audioComponent2;
       
       const params = processHand(hand, state, audioComp, timestamp);
       
-      if (hand.handedness === "Left") {
+      if (controllerHandedness === "Left") {
         audioParams1 = params;
       } else {
         audioParams2 = params;
