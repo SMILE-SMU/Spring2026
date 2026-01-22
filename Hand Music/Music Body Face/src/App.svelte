@@ -180,10 +180,9 @@
   // Reverb mapping from visible trail length
   const REVERB_MAX_MIX = 0.75;
   const REVERB_MIN_TAIL = 0.3;
-  const REVERB_MAX_TAIL = 6.0;
+  const REVERB_MAX_TAIL = 3.0;
   const REVERB_MAX_TRAIL_HEIGHTS = 2.0; // max effect at ~2x screen height of trail length
   const REVERB_MIX_SMOOTH = 0.08;
-  const REVERB_DECAY_DURING_PLAY = 1.0; // keep stable during note to avoid reverb regeneration glitches
 
   type ReverbHold = { startMs: number; mix: number; decay: number } | null;
   const reverbHold: Record<Handedness, ReverbHold> = $state({ Left: null, Right: null });
@@ -208,7 +207,8 @@
     }
     const mapped = mapTrailToReverb(trails[handedness].lengthNorm);
     state.reverbMixSmooth = REVERB_MIX_SMOOTH * mapped.mix + (1 - REVERB_MIX_SMOOTH) * state.reverbMixSmooth;
-    return { reverbMix: state.reverbMixSmooth, reverbDecay: REVERB_DECAY_DURING_PLAY };
+    // Reverb tail should grow in real-time as the trail grows.
+    return { reverbMix: state.reverbMixSmooth, reverbDecay: mapped.decay };
   }
 
   function updateTrailFade(nowMs: number): void {
@@ -866,7 +866,11 @@
       for (const handedness of ["Left", "Right"] as const) {
         const t = trails[handedness];
         if (t.phase === "idle") continue;
-        if (!visibleHandedness.has(handedness)) continue;
+        // Keep the trail visible during brief tracking loss and during the release tail.
+        // This prevents flicker when the hand temporarily disappears at high speed.
+        const hs = handStates[handedness];
+        const shouldShowTrail = visibleHandedness.has(handedness) || hs.wasPlaying || hs.isInRelease;
+        if (!shouldShowTrail) continue;
         trailOverlays.push({ handedness, points: t.points, color: t.color, alpha: t.alpha });
       }
       drawLandmarks(ctx, singleHandMode ? { ...result, hands: activeHands } : result, { trails: trailOverlays });

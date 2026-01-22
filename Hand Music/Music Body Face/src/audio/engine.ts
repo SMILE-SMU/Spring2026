@@ -9,11 +9,11 @@ import * as Tone from "tone";
 const DEBUG_AUDIO = true;
 
 // Reverb enable (tied to visual trail length mapping in App). Toggle for debugging.
-const ENABLE_REVERB = false;
+const ENABLE_REVERB = true;
 // Wah enable (filter cutoff follows hand openness). Disable to isolate vibrato.
-const ENABLE_WAH = false;
+const ENABLE_WAH = true;
 // Vibrato enable (Tone.PitchShift driven by hand motion). Disable to isolate other issues.
-const ENABLE_VIBRATO = false;
+const ENABLE_VIBRATO = true;
 
 // Stable IDs for engines + source nodes for readable logs
 let nextEngineId = 1;
@@ -88,7 +88,7 @@ export interface AudioEngine {
   pitchShift: Tone.PitchShift | null;
   filter: Tone.Filter | null; // Lowpass filter for wah effect
   delay: Tone.FeedbackDelay | null; // Feedback delay for echo effect
-  reverb: Tone.Reverb | null;
+  reverb: Tone.JCReverb | null;
   gain: Tone.Gain | null; // dry gain (note amplitude)
   wetGain: Tone.Gain | null; // wet gain (reverb level, not tied to dry)
   limiter: Tone.Limiter | null;
@@ -678,16 +678,14 @@ export async function startAudio(engine: AudioEngine): Promise<void> {
   const volume = new Tone.Volume(6).connect(limiter);
   const dryGain = new Tone.Gain(0).connect(volume);
   const wetGain = ENABLE_REVERB ? new Tone.Gain(0).connect(volume) : null;
+  // Use JCReverb (algorithmic) so "tail length" can change continuously without
+  // regenerating an impulse response (Tone.Reverb.generate()).
   const reverb = ENABLE_REVERB
-    ? new Tone.Reverb({
-        decay: 1,
-        preDelay: 0.01,
+    ? new Tone.JCReverb({
+        roomSize: 0.2,
         wet: 1, // fully wet; mix handled by wetGain
       }).connect(wetGain!)
     : null;
-  if (ENABLE_REVERB) {
-    await reverb!.generate();
-  }
   
   // Feedback delay for echo effect (DISABLED for now)
   const delay = new Tone.FeedbackDelay({
@@ -711,9 +709,10 @@ export async function startAudio(engine: AudioEngine): Promise<void> {
   
   const pitchShift = new Tone.PitchShift({
     pitch: 0,
-    // Slightly larger window for smoother pitch modulation (less glitchy vibrato)
-    windowSize: 0.05,
-    delayTime: 0,
+    // Larger window + tiny delay makes modulation smoother/less grainy
+    // (at the cost of a bit more latency).
+    windowSize: 0.08,
+    delayTime: 0.01,
   }).connect(filter);
 
   // Create crossfade gain nodes
@@ -1289,7 +1288,16 @@ export function updateAudioParams(engine: AudioEngine, params: AudioParams): voi
 
   // Pitch shift (used for velocity-driven vibrato)
   if (engine.pitchShift) {
-    engine.pitchShift.pitch = ENABLE_VIBRATO ? params.pitchShift : 0;
+    const target = ENABLE_VIBRATO ? params.pitchShift : 0;
+    // Smooth parameter changes to reduce "steppy" / glitchy artifacts.
+    // Tone's PitchShift.pitch is a Signal in practice, but keep this defensive.
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const p: any = (engine.pitchShift as any).pitch;
+    if (p && typeof p.rampTo === "function") {
+      p.rampTo(target, 0.03);
+    } else {
+      engine.pitchShift.pitch = target;
+    }
   }
 
   // Update gain - slightly slower ramp to reduce jitter/pops
@@ -1317,25 +1325,16 @@ export function updateAudioParams(engine: AudioEngine, params: AudioParams): voi
     const wet = Math.max(0, Math.min(0.75, params.reverbMix));
     engine.wetGain.gain.rampTo(wet, 0.05);
 
-    // Updating decay regenerates the impulse response; throttle to avoid heavy work.
-    const desiredDecay = Math.max(0.1, Math.min(10, params.reverbDecay));
-    const now = Tone.now();
-    const shouldUpdateDecay =
-      Math.abs(desiredDecay - engine.lastReverbDecay) > 0.25 &&
-      (now - engine.lastReverbUpdateAt) > 0.25 &&
-      !engine.isReverbGenerating;
-
-    if (shouldUpdateDecay) {
-      engine.lastReverbDecay = desiredDecay;
-      engine.lastReverbUpdateAt = now;
-      engine.isReverbGenerating = true;
-      engine.reverb.decay = desiredDecay;
-      engine.reverb.generate()
-        .catch(() => {})
-        .finally(() => {
-          engine.isReverbGenerating = false;
-        });
-    }
+    // Map requested "decay seconds" onto JCReverb roomSize (0..1).
+    // This isn't a 1:1 seconds mapping, but it tracks the gesture continuously.
+    const desiredDecay = Math.max(0.3, Math.min(6.0, params.reverbDecay));
+    const x = (desiredDecay - 0.3) / (6.0 - 0.3);
+    const room = 0.05 + 0.95 * x;
+    // roomSize is a Signal; ramp to avoid zipper noise.
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const rs: any = (engine.reverb as any).roomSize;
+    if (rs && typeof rs.rampTo === "function") rs.rampTo(room, 0.12);
+    else if (rs && typeof rs.value === "number") rs.value = room;
   }
 }
 
