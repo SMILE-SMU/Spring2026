@@ -59,6 +59,24 @@
     lastFlipMs: number; // timestamp of last direction change
     flipHzEma: number; // estimated direction-change rate (Hz)
     pitchTargetLp: number; // low-passed target pitch shift (semitones)
+    // Tracking dropout handling
+    lastSeenMs: number; // last time this hand was detected (ms)
+    lastParams: AudioParams; // last computed params (for short dropouts)
+    // Smooth re-acquire after tracking loss
+    reacquireFromParams: AudioParams | null;
+    reacquireStartMs: number;
+    // Reverb smoothing (avoid wet jumps)
+    reverbMixSmooth: number;
+    // Open/closed debounce (prevents one-frame false triggers)
+    openConfirmMs: number;
+    closedConfirmMs: number;
+    // Prevent rapid re-triggers from noisy thresholds
+    lastAttackMs: number;
+    lastReleaseMs: number;
+    // Extra stability for fast motion
+    opennessHist: number[]; // recent per-frame openness measurements (median filter)
+    gainSmooth: number; // slew-limited gain to reduce audible jitter
+    closedOpennessSlew: number; // extra smoothing used ONLY for closed/release detection
   }
   
   function createHandState(): HandState {
@@ -78,6 +96,18 @@
       lastFlipMs: 0,
       flipHzEma: 0,
       pitchTargetLp: 0,
+      lastSeenMs: 0,
+      lastParams: { pitchShift: 0, gain: 0, filterCutoff: 1, delayTime: 0, feedback: 0, reverbMix: 0, reverbDecay: 1 },
+      reacquireFromParams: null,
+      reacquireStartMs: 0,
+      reverbMixSmooth: 0,
+      openConfirmMs: 0,
+      closedConfirmMs: 0,
+      lastAttackMs: 0,
+      lastReleaseMs: 0,
+      opennessHist: [],
+      gainSmooth: 0,
+      closedOpennessSlew: 0,
     };
   }
   
@@ -148,6 +178,8 @@
   const REVERB_MIN_TAIL = 0.3;
   const REVERB_MAX_TAIL = 6.0;
   const REVERB_MAX_TRAIL_HEIGHTS = 2.0; // max effect at ~2x screen height of trail length
+  const REVERB_MIX_SMOOTH = 0.08;
+  const REVERB_DECAY_DURING_PLAY = 1.0; // keep stable during note to avoid reverb regeneration glitches
 
   type ReverbHold = { startMs: number; mix: number; decay: number } | null;
   const reverbHold: Record<Handedness, ReverbHold> = $state({ Left: null, Right: null });
@@ -159,7 +191,7 @@
     return { mix: lengthNorm < 0.02 ? 0 : mix, decay };
   }
 
-  function currentReverbFor(handedness: Handedness, nowMs: number): { reverbMix: number; reverbDecay: number } {
+  function currentReverbFor(handedness: Handedness, state: HandState, nowMs: number): { reverbMix: number; reverbDecay: number } {
     const hold = reverbHold[handedness];
     if (hold) {
       const elapsed = Math.max(0, (nowMs - hold.startMs) / 1000);
@@ -171,7 +203,8 @@
       return { reverbMix: hold.mix * t, reverbDecay: hold.decay };
     }
     const mapped = mapTrailToReverb(trails[handedness].lengthNorm);
-    return { reverbMix: mapped.mix, reverbDecay: mapped.decay };
+    state.reverbMixSmooth = REVERB_MIX_SMOOTH * mapped.mix + (1 - REVERB_MIX_SMOOTH) * state.reverbMixSmooth;
+    return { reverbMix: state.reverbMixSmooth, reverbDecay: REVERB_DECAY_DURING_PLAY };
   }
 
   function updateTrailFade(nowMs: number): void {
@@ -265,15 +298,19 @@
   const VIBRATO_LP_TAU_BASE = 0.08; // seconds
   const VIBRATO_LP_TAU_FAST = 0.22; // seconds (more smoothing at very high speeds)
   const VIBRATO_SLEW_SEMITONES_PER_SEC = 0.35; // stronger slew limiting for stability
-  const OPENNESS_SMOOTHING = 0.4; // Fast openness response
+  // Openness smoothing: keep it simple + predictable.
+  const OPENNESS_SMOOTHING = 0.35;
   const OPENNESS_MIN = 0.08;
   const OPENNESS_MAX = 0.18;
   const MAX_GAIN = 1.0;
   const MIN_PLAYING_GAIN = 0.25;
   const RELEASE_GAIN = 0.5;
   const FIST_CLOSED_THRESHOLD = 0.09;
-  const HAND_OPEN_THRESHOLD = 0.13;
+  const HAND_OPEN_THRESHOLD = 0.12;
   const RELEASE_TIMEOUT_MS = 2000;
+  const OPEN_CONFIRM_MS = 35;
+  const OPEN_CONFIRM_MS_RELEASE = 25; // re-open should re-trigger fast during release (but not on 1 noisy frame)
+  const CLOSED_CONFIRM_MS = 90;
   
   // Jerkiness settings
   const JERKINESS_SMOOTHING = 0.4; // Faster response
@@ -284,6 +321,11 @@
   const VELOCITY_SMOOTHING = 0.1; // Faster velocity response
   const MAX_VELOCITY = 2.0;
   const ROTATION_SMOOTHING = 0.3; // Faster rotation response
+
+  // Tracking robustness: briefly hold state when detection drops out.
+  // This prevents "terrible behavior" in fast motion / low light.
+  const TRACKING_LOSS_GRACE_MS = 600;
+  const TRACKING_LOSS_MAX_HOLD_MS = 3000; // safety: eventually release to avoid stuck notes
   
   // Handlers
   async function handleStart(): Promise<void> {
@@ -513,48 +555,66 @@
     const capped = Math.max(-maxSemitones, Math.min(maxSemitones, state.smoothedPitch));
     const pitchShift = Math.abs(capped) < 0.0005 ? 0 : capped;
 
-    // Calculate hand openness
-    const fingertips = [indexTip, middleTip, ringTip, pinkyTip, thumbTip].filter(t => t != null);
-    let totalDistance = 0;
-    let validCount = 0;
-    
+    // Calculate hand openness (simple + robust):
+    // use median fingertip distance and a single EMA. Everything else was adding chaos.
+    const fingertips = [indexTip, middleTip, ringTip, pinkyTip, thumbTip].filter(Boolean);
+    const distances: number[] = [];
     for (const tip of fingertips) {
-      if (tip) {
-        const dx = tip.x - wrist.x;
-        const dy = tip.y - wrist.y;
-        const dz = (tip.z !== undefined && wrist.z !== undefined) ? (tip.z - wrist.z) * 0.5 : 0;
-        totalDistance += Math.sqrt(dx * dx + dy * dy + dz * dz);
-        validCount++;
-      }
+      const dx = tip.x - wrist.x;
+      const dy = tip.y - wrist.y;
+      const dz = (tip.z !== undefined && wrist.z !== undefined) ? (tip.z - wrist.z) * 0.5 : 0;
+      distances.push(Math.sqrt(dx * dx + dy * dy + dz * dz));
     }
-    
-    const avgDistance = validCount >= 3 ? totalDistance / validCount : state.smoothedOpenness;
-    state.smoothedOpenness = OPENNESS_SMOOTHING * avgDistance + (1 - OPENNESS_SMOOTHING) * state.smoothedOpenness;
+    let measuredOpenness = state.smoothedOpenness;
+    if (distances.length >= 3) {
+      distances.sort((a, b) => a - b);
+      measuredOpenness = distances[Math.floor(distances.length / 2)];
+    }
+    state.smoothedOpenness = OPENNESS_SMOOTHING * measuredOpenness + (1 - OPENNESS_SMOOTHING) * state.smoothedOpenness;
 
-    // Apply user calibration so "closed" can be easier to trigger.
-    const effectiveOpenness = state.smoothedOpenness / Math.max(1, opennessSensitivity);
+    const opennessForControls = state.smoothedOpenness;
+    const closedOpenness = state.smoothedOpenness / Math.max(1, opennessSensitivity);
 
     const normalizedOpenness = Math.max(0, Math.min(
-      (effectiveOpenness - OPENNESS_MIN) / (OPENNESS_MAX - OPENNESS_MIN),
+      (opennessForControls - OPENNESS_MIN) / (OPENNESS_MAX - OPENNESS_MIN),
       1.0
     ));
     
     const curvedGain = Math.pow(normalizedOpenness, 0.5);
-    const isFistClosed = effectiveOpenness < FIST_CLOSED_THRESHOLD;
-    const isHandOpen = effectiveOpenness > HAND_OPEN_THRESHOLD;
+    const isFistClosedRaw = closedOpenness < FIST_CLOSED_THRESHOLD;
+    const isHandOpenRaw = opennessForControls > HAND_OPEN_THRESHOLD;
+    // Make open/closed mutually exclusive to avoid flapping when tracking jitters.
+    const openCandidate = isHandOpenRaw && !isFistClosedRaw;
+    const closedCandidate = isFistClosedRaw && !isHandOpenRaw;
+
+    const dtMs = dt * 1000;
+    if (openCandidate) state.openConfirmMs = Math.min(1000, state.openConfirmMs + dtMs);
+    else state.openConfirmMs = 0;
+    if (closedCandidate) state.closedConfirmMs = Math.min(1000, state.closedConfirmMs + dtMs);
+    else state.closedConfirmMs = 0;
+
+    const isHandOpen = state.openConfirmMs >= OPEN_CONFIRM_MS;
+    const isFistClosed = state.closedConfirmMs >= CLOSED_CONFIRM_MS;
     
     let gain: number;
     
     if (state.isInRelease) {
       gain = RELEASE_GAIN;
       const releaseElapsed = Date.now() - state.releaseStartTime;
-      if (isHandOpen || releaseElapsed > RELEASE_TIMEOUT_MS) {
+      // During release, allow immediate re-trigger — but ONLY if we actually detect the hand as open.
+      // (openConfirmMs is 0 when not open, so OPEN_CONFIRM_MS_RELEASE=0 alone would always be "true".)
+      const isHandOpenForRelease = openCandidate && state.openConfirmMs >= OPEN_CONFIRM_MS_RELEASE;
+      if (isHandOpenForRelease || releaseElapsed > RELEASE_TIMEOUT_MS) {
         state.isInRelease = false;
-        if (isHandOpen) {
+        if (isHandOpenForRelease) {
           reverbHold[hand.handedness] = null;
+          state.reverbMixSmooth = 0;
+          state.openConfirmMs = 0;
+          state.closedConfirmMs = 0;
           startTrail(hand.handedness, palm.y);
           audioComp?.attack();
           state.wasPlaying = true;
+          state.lastAttackMs = timestamp;
         }
       }
     } else if (state.wasPlaying) {
@@ -562,22 +622,30 @@
     } else {
       gain = curvedGain * MAX_GAIN;
     }
+
+    // Gentle gain smoothing only (prevents audible jitter without latency).
+    state.gainSmooth = 0.22 * gain + 0.78 * state.gainSmooth;
+    gain = state.gainSmooth;
     
-    // State transitions
+    // State transitions (simple)
     if (isHandOpen && !state.wasPlaying && !state.isInRelease) {
       console.log(`${hand.handedness} → ATTACK`);
       reverbHold[hand.handedness] = null;
+      state.reverbMixSmooth = 0;
+      state.openConfirmMs = 0;
+      state.closedConfirmMs = 0;
       startTrail(hand.handedness, palm.y);
       if (DEBUG_HAND) {
         console.log(
           `[hand ${hand.handedness}] ATTACK requested; openness=${state.smoothedOpenness.toFixed(3)} ` +
-          `(effective=${effectiveOpenness.toFixed(3)}, sens=${opennessSensitivity.toFixed(1)}) ` +
+          `(open=${opennessForControls.toFixed(3)}, closed=${closedOpenness.toFixed(3)}, sens=${opennessSensitivity.toFixed(1)}) ` +
           `(open>${HAND_OPEN_THRESHOLD}, fist<${FIST_CLOSED_THRESHOLD}) ` +
           `audioState=${audioComp?.playState?.() ?? "?"}`
         );
       }
       audioComp?.attack();
       state.wasPlaying = true;
+      state.lastAttackMs = timestamp;
     } else if (isFistClosed && state.wasPlaying) {
       console.log(`${hand.handedness} → RELEASE`);
       releaseTrail(hand.handedness, timestamp);
@@ -587,7 +655,7 @@
       if (DEBUG_HAND) {
         console.log(
           `[hand ${hand.handedness}] RELEASE requested; openness=${state.smoothedOpenness.toFixed(3)} ` +
-          `(effective=${effectiveOpenness.toFixed(3)}, sens=${opennessSensitivity.toFixed(1)}) ` +
+          `(open=${opennessForControls.toFixed(3)}, closed=${closedOpenness.toFixed(3)}, sens=${opennessSensitivity.toFixed(1)}) ` +
           `(open>${HAND_OPEN_THRESHOLD}, fist<${FIST_CLOSED_THRESHOLD}) ` +
           `audioState=${audioComp?.playState?.() ?? "?"}`
         );
@@ -596,19 +664,25 @@
       state.wasPlaying = false;
       state.isInRelease = true;
       state.releaseStartTime = Date.now();
+      state.lastReleaseMs = timestamp;
     }
 
     const filterCutoff = normalizedOpenness;
     const delayTime = state.smoothedVelocity;
     const feedback = state.smoothedPalmRotation;
 
-    const rv = currentReverbFor(hand.handedness, timestamp);
+    const rv = currentReverbFor(hand.handedness, state, timestamp);
 
     if (state.wasPlaying) {
       addTrailPoint(hand.handedness, palm.x, palm.y, normalizedOpenness);
     }
 
-    return { pitchShift, gain, filterCutoff, delayTime, feedback, reverbMix: rv.reverbMix, reverbDecay: rv.reverbDecay };
+    const computed: AudioParams = { pitchShift, gain, filterCutoff, delayTime, feedback, reverbMix: rv.reverbMix, reverbDecay: rv.reverbDecay };
+
+    // Save last good params for dropout hold.
+    state.lastSeenMs = timestamp;
+    state.lastParams = computed;
+    return computed;
   }
 
   function handleTrackingResult(result: TrackingResult, timestamp: number): void {
@@ -658,8 +732,16 @@
           state.smoothedVelocity *= 0.9;
           state.smoothedPalmRotation *= 0.95;
           state.smoothedOpenness = 0;
+          state.openConfirmMs = 0;
+          state.closedConfirmMs = 0;
+          state.lastAttackMs = 0;
+          state.lastReleaseMs = 0;
+          state.opennessHist = [];
+          state.gainSmooth = 0;
+          state.closedOpennessSlew = 0;
           state.prevHandPos = null;
           reverbHold[handedness] = null;
+          state.reverbMixSmooth = 0;
 
           const params: AudioParams = {
             pitchShift: handedness === "Left" ? audioParams1.pitchShift : audioParams2.pitchShift,
@@ -678,10 +760,34 @@
           }
           continue;
         }
-        
-        // Trigger release if was playing
+
+        // If tracking drops briefly, hold the last state/params instead of releasing.
+        const msSinceSeen = state.lastSeenMs > 0 ? (timestamp - state.lastSeenMs) : Number.POSITIVE_INFINITY;
+        const withinGrace = msSinceSeen <= TRACKING_LOSS_GRACE_MS;
+        const withinMaxHold = msSinceSeen <= TRACKING_LOSS_MAX_HOLD_MS;
+
+        if (state.wasPlaying && withinGrace) {
+          // Keep playing: do not trigger release, do not zero params.
+          if (handedness === "Left") audioParams1 = state.lastParams;
+          else audioParams2 = state.lastParams;
+          continue;
+        }
+        if (state.wasPlaying && withinMaxHold) {
+          // Still missing but not too long: gently decay modulation, keep gain.
+          const held: AudioParams = {
+            ...state.lastParams,
+            delayTime: state.lastParams.delayTime * 0.9,
+            feedback: state.lastParams.feedback * 0.98,
+          };
+          state.lastParams = held;
+          if (handedness === "Left") audioParams1 = held;
+          else audioParams2 = held;
+          continue;
+        }
+
+        // Past the max hold: trigger release if was playing
         if (state.wasPlaying) {
-          console.log(`${handedness} hand lost → RELEASE`);
+          console.log(`${handedness} hand lost (>${TRACKING_LOSS_MAX_HOLD_MS}ms) → RELEASE`);
           releaseTrail(handedness, timestamp);
           const mapped = mapTrailToReverb(trails[handedness].lengthNorm);
           reverbHold[handedness] = { startMs: timestamp, mix: mapped.mix, decay: mapped.decay };
@@ -708,7 +814,7 @@
         // Set gain to 0 when not in release, otherwise fixed release gain
         const gain = state.isInRelease ? RELEASE_GAIN : 0;
 
-        const rv = currentReverbFor(handedness, timestamp);
+        const rv = currentReverbFor(handedness, state, timestamp);
         const params: AudioParams = {
           pitchShift: handedness === "Left" ? audioParams1.pitchShift : audioParams2.pitchShift,
           gain,

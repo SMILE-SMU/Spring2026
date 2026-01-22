@@ -8,8 +8,12 @@ import * as Tone from "tone";
 // Debug logging (set to false to silence)
 const DEBUG_AUDIO = true;
 
-// Reverb enable (tied to visual trail length mapping in App)
-const ENABLE_REVERB = true;
+// Reverb enable (tied to visual trail length mapping in App). Toggle for debugging.
+const ENABLE_REVERB = false;
+// Wah enable (filter cutoff follows hand openness). Disable to isolate vibrato.
+const ENABLE_WAH = false;
+// Vibrato enable (Tone.PitchShift driven by hand motion). Disable to isolate other issues.
+const ENABLE_VIBRATO = false;
 
 // Stable IDs for engines + source nodes for readable logs
 let nextEngineId = 1;
@@ -426,6 +430,8 @@ const RETRIGGER_CROSSFADE_DURATION = 0.12;
 
 // Fade out duration when stopping (prevents clicks)
 const FADE_OUT_DURATION = 0.1;
+// Tiny de-click fade when force-stopping an active source
+const DECLICK_STOP_DURATION = 0.01;
 
 // Filter settings for wah effect
 const FILTER_MIN_FREQ = 200; // Hz - "w" sound (closed hand)
@@ -834,7 +840,7 @@ export function stopAudio(engine: AudioEngine): void {
   engine.playState = "idle";
 }
 
-function stopCurrentSound(engine: AudioEngine, fade: boolean = false): void {
+function stopCurrentSound(engine: AudioEngine, fade: boolean = true): void {
   // Cancel any scheduled loop
   if (engine.loopSchedulerId !== null) {
     clearTimeout(engine.loopSchedulerId);
@@ -860,8 +866,18 @@ function stopCurrentSound(engine: AudioEngine, fade: boolean = false): void {
       stopSourceNodes(engine);
     }, FADE_OUT_DURATION * 1000 + 50);
   } else {
-    // Stop immediately
-    stopSourceNodes(engine);
+    // Stop immediately (still try to de-click quickly)
+    if (engine.sourceGain1) {
+      engine.sourceGain1.gain.setValueAtTime(engine.sourceGain1.gain.value, now);
+      engine.sourceGain1.gain.linearRampToValueAtTime(0, now + DECLICK_STOP_DURATION);
+    }
+    if (engine.sourceGain2) {
+      engine.sourceGain2.gain.setValueAtTime(engine.sourceGain2.gain.value, now);
+      engine.sourceGain2.gain.linearRampToValueAtTime(0, now + DECLICK_STOP_DURATION);
+    }
+    setTimeout(() => {
+      stopSourceNodes(engine);
+    }, DECLICK_STOP_DURATION * 1000 + 20);
   }
 }
 
@@ -892,13 +908,25 @@ function stopSourceNodes(engine: AudioEngine): void {
   engine.activeSource = 1;
 }
 
+function safeStopAndDisconnect(node: AudioBufferSourceNode): void {
+  // Do NOT touch lane gain automation here: during crossfading the same gain nodes
+  // get reused quickly, and cancelling/ramping can mute the currently-active lane.
+  // We only stop/disconnect; crossfades already ramp gains to 0 before cleanup.
+  try {
+    node.stop();
+    node.disconnect();
+  } catch (e) {
+    // Already stopped
+  }
+}
+
 // Create and start a new source node
-function createSource(engine: AudioEngine, startTime: number, gainNode: GainNode): AudioBufferSourceNode {
+function createSource(engine: AudioEngine, startOffset: number, gainNode: GainNode, when: number = 0): AudioBufferSourceNode {
   const ctx = Tone.getContext().rawContext;
   const source = ctx.createBufferSource();
   source.buffer = engine.buffer!;
   source.connect(gainNode);
-  source.start(0, startTime);
+  source.start(when, startOffset);
   // Tag for debugging
   sourceId(source);
   return source;
@@ -941,10 +969,7 @@ function performCrossfade(engine: AudioEngine): void {
     // Stop old source after crossfade
     setTimeout(() => {
       if (old) {
-        try {
-          old.stop();
-          old.disconnect();
-        } catch (e) {}
+        safeStopAndDisconnect(old);
         if (DEBUG_AUDIO) dlog(engine, `crossfade cleanup stopped src1=${sourceId(old)}`);
         if (engine.sourceNode === old) engine.sourceNode = null;
       }
@@ -967,10 +992,7 @@ function performCrossfade(engine: AudioEngine): void {
     // Stop old source after crossfade
     setTimeout(() => {
       if (old) {
-        try {
-          old.stop();
-          old.disconnect();
-        } catch (e) {}
+        safeStopAndDisconnect(old);
         if (DEBUG_AUDIO) dlog(engine, `crossfade cleanup stopped src2=${sourceId(old)}`);
         if (engine.sourceNode2 === old) engine.sourceNode2 = null;
       }
@@ -1006,6 +1028,7 @@ export function triggerAttack(engine: AudioEngine): void {
 
     const ctx = Tone.getContext().rawContext;
     const now = ctx.currentTime;
+    const stopAt = now + DECLICK_STOP_DURATION;
 
     // In release, the "release tail" lives on the inactive lane.
     const attackLaneIndex: 1 | 2 = engine.activeSource;
@@ -1022,31 +1045,36 @@ export function triggerAttack(engine: AudioEngine): void {
     // Stop anything currently on the attack lane (old note's current lane).
     const oldAttack = engine[attackSlot];
     if (oldAttack) {
-      try { oldAttack.stop(); oldAttack.disconnect(); } catch (e) {}
-      if (engine[attackSlot] === oldAttack) engine[attackSlot] = null;
+      // De-click: ramp the lane gain down briefly, then stop.
+      attackGain.gain.cancelScheduledValues(now);
+      attackGain.gain.setValueAtTime(attackGain.gain.value, now);
+      attackGain.gain.linearRampToValueAtTime(0, stopAt);
+      setTimeout(() => {
+        safeStopAndDisconnect(oldAttack);
+        if (engine[attackSlot] === oldAttack) engine[attackSlot] = null;
+      }, DECLICK_STOP_DURATION * 1000 + 20);
     }
 
     // Cancel old gain automation and set explicit start values.
-    attackGain.gain.cancelScheduledValues(now);
     releaseGain.gain.cancelScheduledValues(now);
     // New attack fades in from 0.
-    attackGain.gain.setValueAtTime(0, now);
+    attackGain.gain.setValueAtTime(0, stopAt);
     // Release lane starts at whatever it is right now.
     releaseGain.gain.setValueAtTime(releaseGain.gain.value, now);
 
     // Start the new note on the attack lane.
-    const newSource = createSource(engine, 0, attackGain);
+    const newSource = createSource(engine, 0, attackGain, stopAt);
     engine[attackSlot] = newSource;
     attachEndedCleanup(engine, newSource, attackSlot);
 
     // Short overlap crossfade: release down, attack up.
-    attackGain.gain.linearRampToValueAtTime(1, now + RETRIGGER_CROSSFADE_DURATION);
-    releaseGain.gain.linearRampToValueAtTime(0, now + RETRIGGER_CROSSFADE_DURATION);
+    attackGain.gain.linearRampToValueAtTime(1, stopAt + RETRIGGER_CROSSFADE_DURATION);
+    releaseGain.gain.linearRampToValueAtTime(0, stopAt + RETRIGGER_CROSSFADE_DURATION);
 
     // Stop the release tail after overlap, if it exists.
     if (releaseSource) {
       setTimeout(() => {
-        try { releaseSource.stop(); releaseSource.disconnect(); } catch (e) {}
+        safeStopAndDisconnect(releaseSource);
         if (engine[releaseSlot] === releaseSource) engine[releaseSlot] = null;
         dlog(engine, `retrigger cleanup stopped release src=${sourceId(releaseSource)}`);
       }, RETRIGGER_CROSSFADE_DURATION * 1000 + 50);
@@ -1081,8 +1109,19 @@ export function triggerAttack(engine: AudioEngine): void {
       dlog(engine, "State was stuck (no active source), resetting to idle");
       engine.playState = "idle";
     } else {
-      dlog(engine, "Already playing, ignoring attack");
-      return;
+      // If sources exist but both crossfade lanes are effectively silent,
+      // allow a new attack instead of "open hand -> nothing".
+      const g1 = engine.sourceGain1 ? engine.sourceGain1.gain.value : 0;
+      const g2 = engine.sourceGain2 ? engine.sourceGain2.gain.value : 0;
+      const lanesSilent = g1 < 0.001 && g2 < 0.001;
+      if (lanesSilent) {
+        dlog(engine, "State looked stuck (silent lanes), forcing reset to idle");
+        stopCurrentSound(engine, true);
+        engine.playState = "idle";
+      } else {
+        dlog(engine, "Already playing, ignoring attack");
+        return;
+      }
     }
   }
 
@@ -1187,7 +1226,11 @@ export function triggerRelease(engine: AudioEngine): void {
       sourceId(releaseSource);
     }
     
-    // Crossfade: fade out current, fade in release
+    // Crossfade: fade out current, fade in release.
+    // IMPORTANT: cancel any in-flight gain automation (e.g. if user closes during a loop crossfade),
+    // otherwise competing ramps can cause audible hitches.
+    currentGain.gain.cancelScheduledValues(now);
+    releaseGain.gain.cancelScheduledValues(now);
     currentGain.gain.setValueAtTime(currentGain.gain.value, now);
     currentGain.gain.linearRampToValueAtTime(0, now + CROSSFADE_DURATION);
     releaseGain.gain.setValueAtTime(0, now);
@@ -1196,7 +1239,7 @@ export function triggerRelease(engine: AudioEngine): void {
     // Stop current source after crossfade
     setTimeout(() => {
       if (!oldSource) return;
-      try { oldSource.stop(); oldSource.disconnect(); } catch (e) {}
+      safeStopAndDisconnect(oldSource);
       if (DEBUG_AUDIO) dlog(engine, `release cleanup stopped old=${sourceId(oldSource)}`);
       if (engine.sourceNode === oldSource) engine.sourceNode = null;
       if (engine.sourceNode2 === oldSource) engine.sourceNode2 = null;
@@ -1246,16 +1289,21 @@ export function updateAudioParams(engine: AudioEngine, params: AudioParams): voi
 
   // Pitch shift (used for velocity-driven vibrato)
   if (engine.pitchShift) {
-    engine.pitchShift.pitch = params.pitchShift;
+    engine.pitchShift.pitch = ENABLE_VIBRATO ? params.pitchShift : 0;
   }
 
-  // Update gain - fast ramp for responsive volume
-  engine.gain.gain.rampTo(params.gain, 0.005);
+  // Update gain - slightly slower ramp to reduce jitter/pops
+  engine.gain.gain.rampTo(params.gain, 0.015);
   
   // Update filter cutoff for wah effect
   if (engine.filter) {
-    const cutoff = FILTER_MIN_FREQ * Math.pow(FILTER_MAX_FREQ / FILTER_MIN_FREQ, params.filterCutoff);
-    engine.filter.frequency.rampTo(cutoff, 0.008); // Fast ramp
+    if (ENABLE_WAH) {
+      const cutoff = FILTER_MIN_FREQ * Math.pow(FILTER_MAX_FREQ / FILTER_MIN_FREQ, params.filterCutoff);
+      engine.filter.frequency.rampTo(cutoff, 0.008); // Fast ramp
+    } else {
+      // Keep filter fully open so it has no audible "wah" behavior.
+      engine.filter.frequency.rampTo(FILTER_MAX_FREQ, 0.02);
+    }
   }
   
   // Update delay parameters (delay is currently bypassed)
