@@ -110,6 +110,10 @@ export interface AudioEngine {
   lastReverbDecay: number; // seconds
   lastReverbUpdateAt: number; // Tone.now() seconds
   isReverbGenerating: boolean;
+  // Prefetch: keep a sample loaded that matches current handY while idle
+  prefetchTimerId: number | null;
+  prefetchTargetPath: string | null;
+  prefetchInFlight: boolean;
 }
 
 export interface AudioParams {
@@ -318,12 +322,18 @@ function getSampleByPitchGroupAndLayer(
   const clamp01 = (v: number) => Math.max(0, Math.min(1, v));
   const pitchPosition = 1 - clamp01(handY); // 0 = lowest, 1 = highest
 
-  let candidates =
+  // IMPORTANT:
+  // Choose the target pitch from the *full group pitch range* (not per-layer),
+  // then pick a sample for that pitch preferring the requested layer.
+  // Some layers have fewer recorded pitches; using layer-only min/max can make
+  // the middle of the screen map to unexpectedly low (or high) notes.
+  const fullList = samplesByGroupSorted.get(group) ?? [];
+  const layerList =
     group.startsWith("brass:")
       ? (brassSamplesByGroupAndLayerSorted.get(`${group}:${layer}`) ?? [])
-      : (samplesByGroupSorted.get(group) ?? []);
+      : fullList;
 
-  if (candidates.length === 0) {
+  if (fullList.length === 0) {
     // Fallbacks (must exist locally)
     if (group === "strings:cello") return "/audio/Cello Soft/Cello softC3.wav";
     if (group === "strings:viola") return "/audio/Viola Soft/Viola Soft C4.wav";
@@ -375,18 +385,20 @@ function getSampleByPitchGroupAndLayer(
     return filtered.length > 0 ? filtered : list;
   };
 
-  candidates = applyPitchMode(candidates, pitchMode);
+  // Apply pitch mode to the full list so mapping stays consistent across layers.
+  const pitchSpace = applyPitchMode(fullList, pitchMode);
+  if (pitchSpace.length === 0) return fullList[0].path;
   
-  const minMidi = candidates[0].midiNote;
-  const maxMidi = candidates[candidates.length - 1].midiNote;
+  const minMidi = pitchSpace[0].midiNote;
+  const maxMidi = pitchSpace[pitchSpace.length - 1].midiNote;
   const targetMidi = Math.round(minMidi + pitchPosition * (maxMidi - minMidi));
 
   // Binary search for insertion point
   let lo = 0;
-  let hi = candidates.length - 1;
+  let hi = pitchSpace.length - 1;
   while (lo <= hi) {
     const mid = (lo + hi) >> 1;
-    const m = candidates[mid].midiNote;
+    const m = pitchSpace[mid].midiNote;
     if (m === targetMidi) {
       lo = mid;
       break;
@@ -395,28 +407,29 @@ function getSampleByPitchGroupAndLayer(
     else hi = mid - 1;
   }
 
-  const rightIdx = Math.min(Math.max(lo, 0), candidates.length - 1);
+  const rightIdx = Math.min(Math.max(lo, 0), pitchSpace.length - 1);
   const leftIdx = Math.max(rightIdx - 1, 0);
 
-  const leftMidi = candidates[leftIdx].midiNote;
-  const rightMidi = candidates[rightIdx].midiNote;
+  const leftMidi = pitchSpace[leftIdx].midiNote;
+  const rightMidi = pitchSpace[rightIdx].midiNote;
   const leftDist = Math.abs(leftMidi - targetMidi);
   const rightDist = Math.abs(rightMidi - targetMidi);
 
   const chosenMidi =
     leftDist < rightDist ? leftMidi :
     rightDist < leftDist ? rightMidi :
-    // Tie: pick either side (adds tiny variety but same pitch neighborhood)
-    (Math.random() < 0.5 ? leftMidi : rightMidi);
+    // Tie: choose the higher note (stable + monotonic)
+    rightMidi;
 
-  // If multiple samples share the same pitch, pick one at random among them.
-  let start = leftIdx;
-  while (start > 0 && candidates[start - 1].midiNote === chosenMidi) start--;
-  let end = rightIdx;
-  while (end < candidates.length - 1 && candidates[end + 1].midiNote === chosenMidi) end++;
+  const byMidi = (list: SampleInfo[], midi: number): SampleInfo[] => list.filter((s) => s.midiNote === midi);
 
-  const pickIdx = start + Math.floor(Math.random() * (end - start + 1));
-  return candidates[pickIdx].path;
+  // Prefer requested layer if it has this pitch; otherwise fall back to any layer.
+  const layerMatches = byMidi(layerList, chosenMidi);
+  const anyMatches = layerMatches.length > 0 ? layerMatches : byMidi(pitchSpace, chosenMidi);
+  const pool = anyMatches.length > 0 ? anyMatches : pitchSpace;
+
+  pool.sort((a, b) => a.path.localeCompare(b.path));
+  return pool[0].path;
 }
 
 // Loop point percentages (of total duration) - tighter loop region
@@ -655,6 +668,9 @@ export function createAudioEngine(): AudioEngine {
     lastReverbDecay: 1,
     lastReverbUpdateAt: 0,
     isReverbGenerating: false,
+    prefetchTimerId: null,
+    prefetchTargetPath: null,
+    prefetchInFlight: false,
   };
 }
 
@@ -751,11 +767,16 @@ async function loadNewSample(engine: AudioEngine, retryCount: number = 0): Promi
   // Choose which family of samples to use
   let group: SampleGroup = "brass:trombone";
   if (engine.instrumentMode === "strings") {
-    group = Math.random() < 0.5 ? "strings:cello" : "strings:viola";
+    // Keep the same strings group once selected (avoid random pitch range changes)
+    group = engine.currentGroup.startsWith("strings:") ? engine.currentGroup : "strings:cello";
   }
   engine.currentGroup = group;
 
   const samplePath = getSampleByPitchGroupAndLayer(engine.lastHandY, group, engine.currentLayer, engine.pitchMode);
+  // If we're already on the desired sample (and have a buffer), don't reload.
+  if (engine.currentSample === samplePath && engine.buffer && engine.isLoaded) {
+    return;
+  }
   engine.currentSample = samplePath;
   
   try {
@@ -806,6 +827,28 @@ async function loadNewSample(engine: AudioEngine, retryCount: number = 0): Promi
       await loadNewSample(engine, retryCount + 1);
     }
   }
+}
+
+async function loadSpecificSample(engine: AudioEngine, samplePath: string): Promise<void> {
+  engine.currentSample = samplePath;
+  const buffer = await loadAudioBuffer(samplePath);
+  const duration = buffer.duration;
+  const useASR = duration >= ASR_MIN_DURATION;
+  if (useASR) {
+    const targetStart = duration * LOOP_START_PERCENT;
+    const targetEnd = duration * LOOP_END_PERCENT;
+    const optimal = findOptimalLoopPoints(buffer, targetStart, targetEnd);
+    engine.buffer = buffer;
+    engine.useASR = true;
+    engine.loopStart = optimal.loopStart;
+    engine.loopEnd = optimal.loopEnd;
+  } else {
+    engine.buffer = buffer;
+    engine.useASR = false;
+    engine.loopStart = 0;
+    engine.loopEnd = duration;
+  }
+  engine.isLoaded = true;
 }
 
 export function stopAudio(engine: AudioEngine): void {
@@ -1327,8 +1370,8 @@ export function updateAudioParams(engine: AudioEngine, params: AudioParams): voi
 
     // Map requested "decay seconds" onto JCReverb roomSize (0..1).
     // This isn't a 1:1 seconds mapping, but it tracks the gesture continuously.
-    const desiredDecay = Math.max(0.3, Math.min(6.0, params.reverbDecay));
-    const x = (desiredDecay - 0.3) / (6.0 - 0.3);
+    const desiredDecay = Math.max(0.3, Math.min(8.0, params.reverbDecay));
+    const x = (desiredDecay - 0.3) / (8.0 - 0.3);
     const room = 0.05 + 0.95 * x;
     // roomSize is a Signal; ramp to avoid zipper noise.
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -1357,6 +1400,40 @@ export function getPlayState(engine: AudioEngine): PlayState {
 // Update hand Y position for pitch-based sample selection
 export function setHandY(engine: AudioEngine, handY: number): void {
   engine.lastHandY = handY;
+
+  // While idle, prefetch the sample that matches the current hand height.
+  // This makes the next ATTACK match Y more consistently (no "old" pitch hanging around).
+  if (!engine.isRunning) return;
+  if (engine.playState !== "idle") return;
+  if (!samplesLoaded) return;
+
+  const desiredPath = getSampleByPitchGroupAndLayer(engine.lastHandY, engine.currentGroup, engine.currentLayer, engine.pitchMode);
+  if (desiredPath === engine.currentSample) return;
+  engine.prefetchTargetPath = desiredPath;
+
+  if (engine.prefetchTimerId !== null) {
+    clearTimeout(engine.prefetchTimerId);
+    engine.prefetchTimerId = null;
+  }
+
+  // Debounce to avoid reloading constantly while the hand is moving.
+  const scheduledTarget = desiredPath;
+  engine.prefetchTimerId = window.setTimeout(async () => {
+    engine.prefetchTimerId = null;
+    if (engine.prefetchInFlight) return;
+    if (!engine.isRunning) return;
+    if (engine.playState !== "idle") return;
+    if (!engine.prefetchTargetPath) return;
+    if (engine.prefetchTargetPath !== scheduledTarget) return;
+    if (scheduledTarget === engine.currentSample) return;
+
+    engine.prefetchInFlight = true;
+    try {
+      await loadSpecificSample(engine, scheduledTarget);
+    } finally {
+      engine.prefetchInFlight = false;
+    }
+  }, 60);
 }
 
 // Update articulation layer based on movement jerkiness

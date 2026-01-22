@@ -45,6 +45,7 @@
   interface HandState {
     smoothedPitch: number;
     smoothedOpenness: number;
+    smoothedHandYForPitch: number;
     wasPlaying: boolean;
     isInRelease: boolean;
     prevHandPos: { x: number; y: number } | null;
@@ -83,6 +84,7 @@
     return {
       smoothedPitch: 0,
       smoothedOpenness: 0,
+      smoothedHandYForPitch: 0.5,
       wasPlaying: false,
       isInRelease: false,
       prevHandPos: null,
@@ -180,7 +182,8 @@
   // Reverb mapping from visible trail length
   const REVERB_MAX_MIX = 0.75;
   const REVERB_MIN_TAIL = 0.3;
-  const REVERB_MAX_TAIL = 3.0;
+  // User-adjustable max tail length (seconds)
+  let reverbMaxTailSec = $state(3.0);
   const REVERB_MAX_TRAIL_HEIGHTS = 2.0; // max effect at ~2x screen height of trail length
   const REVERB_MIX_SMOOTH = 0.08;
 
@@ -190,7 +193,8 @@
   function mapTrailToReverb(lengthNorm: number): { mix: number; decay: number } {
     const x = Math.max(0, Math.min(1, lengthNorm / REVERB_MAX_TRAIL_HEIGHTS));
     const mix = REVERB_MAX_MIX * x;
-    const decay = REVERB_MIN_TAIL + (REVERB_MAX_TAIL - REVERB_MIN_TAIL) * x;
+    const maxTail = Math.max(REVERB_MIN_TAIL, reverbMaxTailSec);
+    const decay = REVERB_MIN_TAIL + (maxTail - REVERB_MIN_TAIL) * x;
     return { mix: lengthNorm < 0.02 ? 0 : mix, decay };
   }
 
@@ -421,6 +425,7 @@
   // Process a single hand and return its audio params
   function processHand(
     hand: HandData,
+    controllerHandedness: Handedness,
     state: HandState,
     audioComp: Audio | null,
     timestamp: number
@@ -504,7 +509,9 @@
     // Update hand Y position for pitch-based sample selection
     // Use palm center screen-space Y (0 = top, 1 = bottom) so top selects highest pitches.
     const handYForPitch = palm.y;
-    audioComp?.updateHandY(handYForPitch);
+    // Smooth Y a bit so pitch selection doesn't jump on single noisy frames.
+    state.smoothedHandYForPitch = 0.25 * handYForPitch + 0.75 * state.smoothedHandYForPitch;
+    audioComp?.updateHandY(state.smoothedHandYForPitch);
     
     // Vibrato from Y-velocity directly (no LFO).
     // Gate it so it ONLY engages when the hand is oscillating up/down quickly:
@@ -613,11 +620,11 @@
       if (isHandOpenForRelease || releaseElapsed > RELEASE_TIMEOUT_MS) {
         state.isInRelease = false;
         if (isHandOpenForRelease) {
-          reverbHold[hand.handedness] = null;
+          reverbHold[controllerHandedness] = null;
           state.reverbMixSmooth = 0;
           state.openConfirmMs = 0;
           state.closedConfirmMs = 0;
-          startTrail(hand.handedness, palm.y);
+          startTrail(controllerHandedness, palm.y);
           audioComp?.attack();
           state.wasPlaying = true;
           state.lastAttackMs = timestamp;
@@ -635,15 +642,15 @@
     
     // State transitions (simple)
     if (isHandOpen && !state.wasPlaying && !state.isInRelease) {
-      console.log(`${hand.handedness} → ATTACK`);
-      reverbHold[hand.handedness] = null;
+      console.log(`${controllerHandedness} → ATTACK`);
+      reverbHold[controllerHandedness] = null;
       state.reverbMixSmooth = 0;
       state.openConfirmMs = 0;
       state.closedConfirmMs = 0;
-      startTrail(hand.handedness, palm.y);
+      startTrail(controllerHandedness, palm.y);
       if (DEBUG_HAND) {
         console.log(
-          `[hand ${hand.handedness}] ATTACK requested; openness=${state.smoothedOpenness.toFixed(3)} ` +
+          `[hand ${controllerHandedness}] ATTACK requested; openness=${state.smoothedOpenness.toFixed(3)} ` +
           `(open=${opennessForControls.toFixed(3)}, closed=${closedOpenness.toFixed(3)}, sens=${opennessSensitivity.toFixed(1)}) ` +
           `(open>${HAND_OPEN_THRESHOLD}, fist<${FIST_CLOSED_THRESHOLD}) ` +
           `audioState=${audioComp?.playState?.() ?? "?"}`
@@ -653,14 +660,14 @@
       state.wasPlaying = true;
       state.lastAttackMs = timestamp;
     } else if (isFistClosed && state.wasPlaying) {
-      console.log(`${hand.handedness} → RELEASE`);
-      releaseTrail(hand.handedness, timestamp);
+      console.log(`${controllerHandedness} → RELEASE`);
+      releaseTrail(controllerHandedness, timestamp);
       // Hold reverb settings from current trail length so tail rings out after release
-      const mapped = mapTrailToReverb(trails[hand.handedness].lengthNorm);
-      reverbHold[hand.handedness] = { startMs: timestamp, mix: mapped.mix, decay: mapped.decay };
+      const mapped = mapTrailToReverb(trails[controllerHandedness].lengthNorm);
+      reverbHold[controllerHandedness] = { startMs: timestamp, mix: mapped.mix, decay: mapped.decay };
       if (DEBUG_HAND) {
         console.log(
-          `[hand ${hand.handedness}] RELEASE requested; openness=${state.smoothedOpenness.toFixed(3)} ` +
+          `[hand ${controllerHandedness}] RELEASE requested; openness=${state.smoothedOpenness.toFixed(3)} ` +
           `(open=${opennessForControls.toFixed(3)}, closed=${closedOpenness.toFixed(3)}, sens=${opennessSensitivity.toFixed(1)}) ` +
           `(open>${HAND_OPEN_THRESHOLD}, fist<${FIST_CLOSED_THRESHOLD}) ` +
           `audioState=${audioComp?.playState?.() ?? "?"}`
@@ -677,10 +684,10 @@
     const delayTime = state.smoothedVelocity;
     const feedback = state.smoothedPalmRotation;
 
-    const rv = currentReverbFor(hand.handedness, state, timestamp);
+    const rv = currentReverbFor(controllerHandedness, state, timestamp);
 
     if (state.wasPlaying) {
-      addTrailPoint(hand.handedness, palm.x, palm.y, normalizedOpenness);
+      addTrailPoint(controllerHandedness, palm.x, palm.y, normalizedOpenness);
     }
 
     const computed: AudioParams = { pitchShift, gain, filterCutoff, delayTime, feedback, reverbMix: rv.reverbMix, reverbDecay: rv.reverbDecay };
@@ -692,26 +699,58 @@
   }
 
   function handleTrackingResult(result: TrackingResult, timestamp: number): void {
+    const palmXFor = (hand: HandData): number => {
+      const l = hand.landmarks;
+      const wrist = l[HAND.WRIST];
+      const indexMcp = l[HAND.INDEX_MCP];
+      const middleMcp = l[HAND.MIDDLE_MCP];
+      const ringMcp = l[HAND.RING_MCP];
+      const pinkyMcp = l[HAND.PINKY_MCP];
+      const pts = [wrist, indexMcp, middleMcp, ringMcp, pinkyMcp].filter(Boolean);
+      let x = 0;
+      for (const p of pts) x += p.x;
+      return x / (pts.length || 1);
+    };
+
     // In single-hand mode, pick only one detected hand to drive audio.
     // Prefer Right if both are present (more common for users), but latch the engine hand
     // to prevent dropouts when Mediapipe flips handedness during fast motion.
     let activeHands: HandData[] = result.hands;
     let selectedHandedness: Handedness | null = null;
+    let handsForDraw: HandData[] = result.hands;
     if (singleHandMode) {
       if (result.hands.length === 0) {
         activeHands = [];
         selectedHandedness = singleHandLatched;
+        handsForDraw = [];
       } else if (result.hands.length === 1) {
         activeHands = [result.hands[0]];
         selectedHandedness = singleHandLatched ?? result.hands[0].handedness;
         singleHandLatched = selectedHandedness;
+        handsForDraw = [{ ...result.hands[0], handedness: selectedHandedness }];
       } else {
         const right = result.hands.find((h) => h.handedness === "Right");
         const chosen = right ?? result.hands[0];
         activeHands = [chosen];
         selectedHandedness = chosen.handedness;
         singleHandLatched = selectedHandedness;
+        handsForDraw = [{ ...chosen, handedness: selectedHandedness }];
       }
+    } else {
+      // Two-hand mode: Mediapipe handedness labels can swap quickly.
+      // Assign stable "Left/Right" slots by screen X position to keep trails stable.
+      const detected = [...result.hands].map((h) => ({ hand: h, x: palmXFor(h) }));
+      detected.sort((a, b) => a.x - b.x);
+      const slotted: { hand: HandData; slot: Handedness }[] = [];
+      if (detected.length === 1) {
+        const slot: Handedness = detected[0].x < 0.5 ? "Left" : "Right";
+        slotted.push({ hand: detected[0].hand, slot });
+      } else if (detected.length >= 2) {
+        slotted.push({ hand: detected[0].hand, slot: "Left" });
+        slotted.push({ hand: detected[1].hand, slot: "Right" });
+      }
+      activeHands = slotted.map((s) => s.hand);
+      handsForDraw = slotted.map((s) => ({ ...s.hand, handedness: s.slot }));
     }
 
     // Track which engines/hands are currently driving audio (after single-hand latching)
@@ -719,16 +758,20 @@
     if (singleHandMode) {
       if (activeHands.length > 0 && selectedHandedness) detectedHandedness.add(selectedHandedness);
     } else {
-      for (const h of activeHands) detectedHandedness.add(h.handedness);
+      for (const h of handsForDraw) detectedHandedness.add(h.handedness);
     }
     
     // Process each detected hand independently
-    for (const hand of activeHands) {
-      const controllerHandedness: Handedness = singleHandMode ? (selectedHandedness ?? hand.handedness) : hand.handedness;
+    for (let i = 0; i < activeHands.length; i++) {
+      const hand = activeHands[i];
+      const controllerHandedness: Handedness =
+        singleHandMode
+          ? (selectedHandedness ?? hand.handedness)
+          : (handsForDraw[i]?.handedness ?? hand.handedness);
       const state = handStates[controllerHandedness];
       const audioComp = controllerHandedness === "Left" ? audioComponent1 : audioComponent2;
       
-      const params = processHand(hand, state, audioComp, timestamp);
+      const params = processHand(hand, controllerHandedness, state, audioComp, timestamp);
       
       if (controllerHandedness === "Left") {
         audioParams1 = params;
@@ -860,7 +903,7 @@
     // Draw landmarks + trails (only the active hand(s) in single-hand mode)
     const ctx = videoComponent?.getContext();
     if (ctx) {
-      const visibleHands = singleHandMode ? activeHands : result.hands;
+      const visibleHands = handsForDraw;
       const visibleHandedness = new Set(visibleHands.map((h) => h.handedness));
       const trailOverlays: HandTrail[] = [];
       for (const handedness of ["Left", "Right"] as const) {
@@ -873,7 +916,7 @@
         if (!shouldShowTrail) continue;
         trailOverlays.push({ handedness, points: t.points, color: t.color, alpha: t.alpha });
       }
-      drawLandmarks(ctx, singleHandMode ? { ...result, hands: activeHands } : result, { trails: trailOverlays });
+      drawLandmarks(ctx, { ...result, hands: visibleHands }, { trails: trailOverlays });
     }
     
     // Build debug showing both hands' states
@@ -939,20 +982,42 @@
   </section>
 
   <section class="stage">
-    <Video bind:this={videoComponent} onFrame={handleVideoFrame} />
-    <div class="openness-slider" aria-label="Openness sensitivity">
-      <div class="openness-slider__label">Close sensitivity</div>
-      <div class="openness-slider__range-wrap">
-        <input
-          class="openness-slider__range"
-          type="range"
-        min="1"
-        max="2.5"
-          step="0.1"
-          bind:value={opennessSensitivity}
-        />
+    <div class="stage-layout">
+      <div class="side-sliders" aria-label="Controls">
+        <div class="reverb-slider" aria-label="Reverb max tail">
+          <div class="reverb-slider__label">Reverb tail max</div>
+          <div class="reverb-slider__range-wrap">
+            <input
+              class="reverb-slider__range"
+              type="range"
+              min="0.3"
+              max="8.0"
+              step="0.1"
+              bind:value={reverbMaxTailSec}
+            />
+          </div>
+          <div class="reverb-slider__value">{reverbMaxTailSec.toFixed(1)}s</div>
+        </div>
+
+        <div class="openness-slider" aria-label="Openness sensitivity">
+          <div class="openness-slider__label">Close sensitivity</div>
+          <div class="openness-slider__range-wrap">
+            <input
+              class="openness-slider__range"
+              type="range"
+              min="1"
+              max="2.5"
+              step="0.1"
+              bind:value={opennessSensitivity}
+            />
+          </div>
+          <div class="openness-slider__value">{opennessSensitivity.toFixed(1)}×</div>
+        </div>
       </div>
-      <div class="openness-slider__value">{opennessSensitivity.toFixed(1)}×</div>
+
+      <div class="video-stage">
+        <Video bind:this={videoComponent} onFrame={handleVideoFrame} />
+      </div>
     </div>
   </section>
 
@@ -1038,8 +1103,21 @@
   }
 
   .stage {
-    position: relative;
     width: 100%;
+    display: flex;
+    justify-content: center;
+  }
+
+  .stage-layout {
+    width: min(820px, 96vw);
+    display: flex;
+    align-items: stretch;
+    gap: 0.75rem;
+  }
+
+  .video-stage {
+    position: relative;
+    flex: 1;
     max-width: 640px;
     aspect-ratio: 4 / 3;
     background: #111;
@@ -1047,12 +1125,82 @@
     overflow: hidden;
   }
 
-  /* Vertical slider overlay (right side) to calibrate open/closed mapping */
+  /* Two vertical sliders next to the video (left side) */
+  .side-sliders {
+    height: 100%;
+    display: flex;
+    flex-direction: row;
+    align-items: stretch;
+    gap: 0.5rem;
+    pointer-events: auto;
+    z-index: 1;
+  }
+
+  /* Vertical slider to control max reverb tail */
+  .reverb-slider {
+    position: relative;
+    height: 100%;
+    width: 44px;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: flex-start;
+    gap: 0.4rem;
+    pointer-events: auto;
+    touch-action: none;
+    user-select: none;
+    background: rgba(0, 0, 0, 0.35);
+    border: 1px solid rgba(120, 220, 200, 0.25);
+    border-radius: 10px;
+    padding: 0.5rem 0.35rem;
+    backdrop-filter: blur(6px);
+  }
+
+  .reverb-slider__label {
+    writing-mode: vertical-rl;
+    transform: rotate(180deg);
+    font-size: 0.7rem;
+    color: rgba(140, 255, 220, 0.9);
+    letter-spacing: 0.04em;
+    text-transform: uppercase;
+  }
+
+  .reverb-slider__value {
+    font-size: 0.75rem;
+    color: rgba(200, 255, 240, 0.9);
+    font-variant-numeric: tabular-nums;
+  }
+
+  .reverb-slider__range-wrap {
+    flex: 1;
+    width: 100%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 0.25rem 0;
+  }
+
+  .reverb-slider__range {
+    -webkit-appearance: slider-vertical;
+    appearance: slider-vertical;
+    width: 18px;
+    height: 100%;
+    margin: 0;
+    background: transparent;
+    cursor: pointer;
+    touch-action: none;
+  }
+
+  .reverb-slider__range::-webkit-slider-runnable-track {
+    width: 18px;
+    background: rgba(140, 255, 220, 0.22);
+    border-radius: 999px;
+  }
+
+  /* Vertical slider to calibrate open/closed mapping */
   .openness-slider {
-    position: absolute;
-    top: 0.75rem;
-    right: 0.75rem;
-    height: calc(100% - 1.5rem);
+    position: relative;
+    height: 100%;
     width: 44px;
     display: flex;
     flex-direction: column;
