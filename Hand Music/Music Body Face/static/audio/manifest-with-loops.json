@@ -1,0 +1,1343 @@
+{
+  "files": {
+    "Trombone/Standard/Hard Layer": [
+      "TB Hard A2.wav",
+      "TB Hard A3.wav",
+      "TB Hard A4.wav",
+      "TB Hard B2.wav",
+      "TB Hard B3.wav",
+      "TB Hard C3.wav",
+      "TB Hard C4.wav",
+      "TB Hard D2.wav",
+      "TB Hard D3.wav",
+      "TB Hard D4.wav",
+      "TB Hard E2.wav",
+      "TB Hard E3.wav",
+      "TB Hard E4.wav",
+      "TB Hard F2.wav",
+      "TB Hard F3.wav",
+      "TB Hard F4.wav",
+      "TB Hard G2.wav",
+      "TB Hard G3.wav",
+      "TB Hard G4.wav"
+    ],
+    "Trombone/Standard/Medium Layer": [
+      "TB Med A2.wav",
+      "TB Med A3.wav",
+      "TB Med A4.wav",
+      "TB Med B2.wav",
+      "TB Med B3.wav",
+      "TB Med C3.wav",
+      "TB Med C4.wav",
+      "TB Med D2.wav",
+      "TB Med D3.wav",
+      "TB Med D4.wav",
+      "TB Med E2.wav",
+      "TB Med E3.wav",
+      "TB Med E4.wav",
+      "TB Med F2.wav",
+      "TB Med F3.wav",
+      "TB Med F4.wav",
+      "TB Med G2.wav",
+      "TB Med G3.wav",
+      "TB Med G4.wav"
+    ],
+    "Trombone/Standard/Soft Layer": [
+      "TB Soft A2.wav",
+      "TB Soft A3.wav",
+      "TB Soft B2.wav",
+      "TB Soft B3.wav",
+      "TB Soft C3.wav",
+      "TB Soft C4.wav",
+      "TB Soft D2.wav",
+      "TB Soft D3.wav",
+      "TB Soft D4.wav",
+      "TB Soft E2.wav",
+      "TB Soft E3.wav",
+      "TB Soft E4.wav",
+      "TB Soft F2.wav",
+      "TB Soft F3.wav",
+      "TB Soft F4.wav",
+      "TB Soft G2.wav",
+      "TB Soft G3.wav",
+      "TB Soft G4.wav"
+    ],
+    "Trombone/Harmo Mute/Hard Layer": [
+      "Mute TB Hard A2.wav",
+      "Mute TB Hard A3.wav",
+      "Mute TB Hard A4.wav",
+      "Mute TB Hard B2.wav",
+      "Mute TB Hard B3.wav",
+      "Mute TB Hard B4.wav",
+      "Mute TB Hard C3.wav",
+      "Mute TB Hard C4.wav",
+      "Mute TB Hard D2.wav",
+      "Mute TB Hard D3.wav",
+      "Mute TB Hard D4.wav",
+      "Mute TB Hard E2.wav",
+      "Mute TB Hard E3.wav",
+      "Mute TB Hard E4.wav",
+      "Mute TB Hard F2.wav",
+      "Mute TB Hard F3.wav",
+      "Mute TB Hard F4.wav",
+      "Mute TB Hard G2.wav",
+      "Mute TB Hard G3.wav",
+      "Mute TB Hard G4.wav"
+    ],
+    "Trombone/Harmo Mute/Soft Layer": [
+      "Mute TB Soft A2.wav",
+      "Mute TB Soft A3.wav",
+      "Mute TB Soft A4.wav",
+      "Mute TB Soft B2.wav",
+      "Mute TB Soft B3.wav",
+      "Mute TB Soft B4.wav",
+      "Mute TB Soft C3.wav",
+      "Mute TB Soft C4.wav",
+      "Mute TB Soft D2.wav",
+      "Mute TB Soft D3.wav",
+      "Mute TB Soft D4.wav",
+      "Mute TB Soft E2.wav",
+      "Mute TB Soft E3.wav",
+      "Mute TB Soft E4.wav",
+      "Mute TB Soft F2.wav",
+      "Mute TB Soft F3.wav",
+      "Mute TB Soft F4.wav",
+      "Mute TB Soft G2.wav",
+      "Mute TB Soft G3.wav",
+      "Mute TB Soft G4.wav"
+    ],
+    "Cello Soft": [
+      "Cello softA1.wav",
+      "Cello softA2.wav",
+      "Cello softA3.wav",
+      "Cello softA4.wav",
+      "Cello softB1.wav",
+      "Cello softB2.wav",
+      "Cello softB3.wav",
+      "Cello softB4.wav",
+      "Cello softC1.wav",
+      "Cello softC2.wav",
+      "Cello softC3.wav",
+      "Cello softC4.wav",
+      "Cello softC5.wav",
+      "Cello softD1.wav",
+      "Cello softD2.wav",
+      "Cello softD3.wav",
+      "Cello softD4.wav",
+      "Cello softE1.wav",
+      "Cello softE2.wav",
+      "Cello softE3.wav",
+      "Cello softE4.wav",
+      "Cello softF1.wav",
+      "Cello softF2.wav",
+      "Cello softF3.wav",
+      "Cello softF4.wav",
+      "Cello softG1.wav",
+      "Cello softG2.wav",
+      "Cello softG3.wav",
+      "Cello softG4.wav"
+    ],
+    "Viola Soft": [
+      "Viola Soft A2.wav",
+      "Viola Soft A3.wav",
+      "Viola Soft A4.wav",
+      "Viola Soft B2.wav",
+      "Viola Soft B3.wav",
+      "Viola Soft B4.wav",
+      "Viola Soft C2.wav",
+      "Viola Soft C3.wav",
+      "Viola Soft C4.wav",
+      "Viola Soft C5.wav",
+      "Viola Soft D2.wav",
+      "Viola Soft D3.wav",
+      "Viola Soft D4.wav",
+      "Viola Soft E2.wav",
+      "Viola Soft E3.wav",
+      "Viola Soft E4.wav",
+      "Viola Soft F2.wav",
+      "Viola Soft F3.wav",
+      "Viola Soft F4.wav",
+      "Viola Soft G2.wav",
+      "Viola Soft G3.wav",
+      "Viola Soft G4.wav"
+    ]
+  },
+  "loopPoints": {
+    "/audio/Trombone/Standard/Hard Layer/TB Hard A2.wav": {
+      "loopStart": 0.951,
+      "loopEnd": 1.746,
+      "rmsDiff": 0.05,
+      "isAcceptable": true,
+      "useASR": true,
+      "duration": 2.697
+    },
+    "/audio/Trombone/Standard/Hard Layer/TB Hard A3.wav": {
+      "loopStart": 0.927,
+      "loopEnd": 1.723,
+      "rmsDiff": 0.02,
+      "isAcceptable": true,
+      "useASR": true,
+      "duration": 2.619
+    },
+    "/audio/Trombone/Standard/Hard Layer/TB Hard A4.wav": {
+      "loopStart": 0.826,
+      "loopEnd": 1.894,
+      "rmsDiff": 0,
+      "isAcceptable": true,
+      "useASR": true,
+      "duration": 2.58
+    },
+    "/audio/Trombone/Standard/Hard Layer/TB Hard B2.wav": {
+      "loopStart": 0.783,
+      "loopEnd": 1.733,
+      "rmsDiff": 0,
+      "isAcceptable": true,
+      "useASR": true,
+      "duration": 2.505
+    },
+    "/audio/Trombone/Standard/Hard Layer/TB Hard B3.wav": {
+      "loopStart": 0.88,
+      "loopEnd": 1.613,
+      "rmsDiff": 0.018,
+      "isAcceptable": true,
+      "useASR": true,
+      "duration": 2.464
+    },
+    "/audio/Trombone/Standard/Hard Layer/TB Hard C3.wav": {
+      "loopStart": 0.918,
+      "loopEnd": 1.683,
+      "rmsDiff": 0.021,
+      "isAcceptable": true,
+      "useASR": true,
+      "duration": 2.616
+    },
+    "/audio/Trombone/Standard/Hard Layer/TB Hard C4.wav": {
+      "loopStart": 0.766,
+      "loopEnd": 1.531,
+      "rmsDiff": 0.116,
+      "isAcceptable": false,
+      "useASR": true,
+      "duration": 2.316
+    },
+    "/audio/Trombone/Standard/Hard Layer/TB Hard D2.wav": {
+      "loopStart": 0.793,
+      "loopEnd": 1.867,
+      "rmsDiff": 0,
+      "isAcceptable": true,
+      "useASR": true,
+      "duration": 2.658
+    },
+    "/audio/Trombone/Standard/Hard Layer/TB Hard D3.wav": {
+      "loopStart": 0.971,
+      "loopEnd": 2.018,
+      "rmsDiff": 0.002,
+      "isAcceptable": true,
+      "useASR": true,
+      "duration": 2.977
+    },
+    "/audio/Trombone/Standard/Hard Layer/TB Hard D4.wav": {
+      "loopStart": 0.778,
+      "loopEnd": 1.364,
+      "rmsDiff": 0.024,
+      "isAcceptable": true,
+      "useASR": true,
+      "duration": 2.162
+    },
+    "/audio/Trombone/Standard/Hard Layer/TB Hard E2.wav": {
+      "loopStart": 0.678,
+      "loopEnd": 1.977,
+      "rmsDiff": 0,
+      "isAcceptable": true,
+      "useASR": true,
+      "duration": 2.699
+    },
+    "/audio/Trombone/Standard/Hard Layer/TB Hard E3.wav": {
+      "loopStart": 0.671,
+      "loopEnd": 1.524,
+      "rmsDiff": 0.017,
+      "isAcceptable": true,
+      "useASR": true,
+      "duration": 2.391
+    },
+    "/audio/Trombone/Standard/Hard Layer/TB Hard E4.wav": {
+      "loopStart": 0.657,
+      "loopEnd": 1.568,
+      "rmsDiff": 0.076,
+      "isAcceptable": false,
+      "useASR": true,
+      "duration": 2.352
+    },
+    "/audio/Trombone/Standard/Hard Layer/TB Hard F2.wav": {
+      "loopStart": 0.823,
+      "loopEnd": 1.821,
+      "rmsDiff": 0,
+      "isAcceptable": true,
+      "useASR": true,
+      "duration": 2.657
+    },
+    "/audio/Trombone/Standard/Hard Layer/TB Hard F3.wav": {
+      "loopStart": 0.843,
+      "loopEnd": 1.957,
+      "rmsDiff": 0,
+      "isAcceptable": true,
+      "useASR": true,
+      "duration": 2.619
+    },
+    "/audio/Trombone/Standard/Hard Layer/TB Hard F4.wav": {
+      "loopStart": 0.848,
+      "loopEnd": 1.641,
+      "rmsDiff": 0.013,
+      "isAcceptable": true,
+      "useASR": true,
+      "duration": 2.476
+    },
+    "/audio/Trombone/Standard/Hard Layer/TB Hard G2.wav": {
+      "loopStart": 0.923,
+      "loopEnd": 2.028,
+      "rmsDiff": 0,
+      "isAcceptable": true,
+      "useASR": true,
+      "duration": 2.857
+    },
+    "/audio/Trombone/Standard/Hard Layer/TB Hard G3.wav": {
+      "loopStart": 0.823,
+      "loopEnd": 1.62,
+      "rmsDiff": 0,
+      "isAcceptable": true,
+      "useASR": true,
+      "duration": 2.458
+    },
+    "/audio/Trombone/Standard/Hard Layer/TB Hard G4.wav": {
+      "loopStart": 0.918,
+      "loopEnd": 1.736,
+      "rmsDiff": 0.071,
+      "isAcceptable": false,
+      "useASR": true,
+      "duration": 2.609
+    },
+    "/audio/Trombone/Standard/Medium Layer/TB Med A2.wav": {
+      "loopStart": 0.541,
+      "loopEnd": 1.58,
+      "rmsDiff": 0,
+      "isAcceptable": true,
+      "useASR": true,
+      "duration": 2.255
+    },
+    "/audio/Trombone/Standard/Medium Layer/TB Med A3.wav": {
+      "loopStart": 0.847,
+      "loopEnd": 1.505,
+      "rmsDiff": 0.097,
+      "isAcceptable": false,
+      "useASR": true,
+      "duration": 2.338
+    },
+    "/audio/Trombone/Standard/Medium Layer/TB Med A4.wav": {
+      "loopStart": 0.705,
+      "loopEnd": 1.62,
+      "rmsDiff": 0.008,
+      "isAcceptable": true,
+      "useASR": true,
+      "duration": 2.492
+    },
+    "/audio/Trombone/Standard/Medium Layer/TB Med B2.wav": {
+      "loopStart": 0.588,
+      "loopEnd": 1.763,
+      "rmsDiff": 0,
+      "isAcceptable": true,
+      "useASR": true,
+      "duration": 2.313
+    },
+    "/audio/Trombone/Standard/Medium Layer/TB Med B3.wav": {
+      "loopStart": 0.658,
+      "loopEnd": 1.337,
+      "rmsDiff": 0.139,
+      "isAcceptable": false,
+      "useASR": true,
+      "duration": 2.121
+    },
+    "/audio/Trombone/Standard/Medium Layer/TB Med C3.wav": {
+      "loopStart": 0.783,
+      "loopEnd": 1.865,
+      "rmsDiff": 0,
+      "isAcceptable": true,
+      "useASR": true,
+      "duration": 2.539
+    },
+    "/audio/Trombone/Standard/Medium Layer/TB Med C4.wav": {
+      "loopStart": 0.834,
+      "loopEnd": 1.567,
+      "rmsDiff": 0.146,
+      "isAcceptable": false,
+      "useASR": true,
+      "duration": 2.282
+    },
+    "/audio/Trombone/Standard/Medium Layer/TB Med D2.wav": {
+      "loopStart": 0.881,
+      "loopEnd": 1.681,
+      "rmsDiff": 0,
+      "isAcceptable": true,
+      "useASR": true,
+      "duration": 2.579
+    },
+    "/audio/Trombone/Standard/Medium Layer/TB Med D3.wav": {
+      "loopStart": 0.807,
+      "loopEnd": 1.534,
+      "rmsDiff": 0,
+      "isAcceptable": true,
+      "useASR": true,
+      "duration": 2.326
+    },
+    "/audio/Trombone/Standard/Medium Layer/TB Med D4.wav": {
+      "loopStart": 0.858,
+      "loopEnd": 1.536,
+      "rmsDiff": 0.025,
+      "isAcceptable": true,
+      "useASR": true,
+      "duration": 2.388
+    },
+    "/audio/Trombone/Standard/Medium Layer/TB Med E2.wav": {
+      "loopStart": 0.866,
+      "loopEnd": 1.759,
+      "rmsDiff": 0,
+      "isAcceptable": true,
+      "useASR": true,
+      "duration": 2.396
+    },
+    "/audio/Trombone/Standard/Medium Layer/TB Med E3.wav": {
+      "loopStart": 0.861,
+      "loopEnd": 1.816,
+      "rmsDiff": 0.08,
+      "isAcceptable": false,
+      "useASR": true,
+      "duration": 2.384
+    },
+    "/audio/Trombone/Standard/Medium Layer/TB Med E4.wav": {
+      "loopStart": 0.668,
+      "loopEnd": 1.812,
+      "rmsDiff": 0,
+      "isAcceptable": true,
+      "useASR": true,
+      "duration": 2.66
+    },
+    "/audio/Trombone/Standard/Medium Layer/TB Med F2.wav": {
+      "loopStart": 0.697,
+      "loopEnd": 1.618,
+      "rmsDiff": 0,
+      "isAcceptable": true,
+      "useASR": true,
+      "duration": 2.483
+    },
+    "/audio/Trombone/Standard/Medium Layer/TB Med F3.wav": {
+      "loopStart": 0.727,
+      "loopEnd": 1.538,
+      "rmsDiff": 0.048,
+      "isAcceptable": true,
+      "useASR": true,
+      "duration": 2.379
+    },
+    "/audio/Trombone/Standard/Medium Layer/TB Med F4.wav": {
+      "loopStart": 0.882,
+      "loopEnd": 1.684,
+      "rmsDiff": 0,
+      "isAcceptable": true,
+      "useASR": true,
+      "duration": 2.509
+    },
+    "/audio/Trombone/Standard/Medium Layer/TB Med G2.wav": {
+      "loopStart": 0.808,
+      "loopEnd": 1.523,
+      "rmsDiff": 0,
+      "isAcceptable": true,
+      "useASR": true,
+      "duration": 2.341
+    },
+    "/audio/Trombone/Standard/Medium Layer/TB Med G3.wav": {
+      "loopStart": 0.792,
+      "loopEnd": 1.582,
+      "rmsDiff": 0,
+      "isAcceptable": true,
+      "useASR": true,
+      "duration": 2.335
+    },
+    "/audio/Trombone/Standard/Medium Layer/TB Med G4.wav": {
+      "loopStart": 0.907,
+      "loopEnd": 1.628,
+      "rmsDiff": 0.094,
+      "isAcceptable": false,
+      "useASR": true,
+      "duration": 2.54
+    },
+    "/audio/Trombone/Standard/Soft Layer/TB Soft A2.wav": {
+      "loopStart": 0.987,
+      "loopEnd": 2.169,
+      "rmsDiff": 0,
+      "isAcceptable": true,
+      "useASR": true,
+      "duration": 2.914
+    },
+    "/audio/Trombone/Standard/Soft Layer/TB Soft A3.wav": {
+      "loopStart": 0.953,
+      "loopEnd": 2.268,
+      "rmsDiff": 0,
+      "isAcceptable": true,
+      "useASR": true,
+      "duration": 3.178
+    },
+    "/audio/Trombone/Standard/Soft Layer/TB Soft B2.wav": {
+      "loopStart": 0.817,
+      "loopEnd": 1.958,
+      "rmsDiff": 0,
+      "isAcceptable": true,
+      "useASR": true,
+      "duration": 2.592
+    },
+    "/audio/Trombone/Standard/Soft Layer/TB Soft B3.wav": {
+      "loopStart": 0.593,
+      "loopEnd": 1.575,
+      "rmsDiff": 0,
+      "isAcceptable": true,
+      "useASR": true,
+      "duration": 2.465
+    },
+    "/audio/Trombone/Standard/Soft Layer/TB Soft C3.wav": {
+      "loopStart": 0.861,
+      "loopEnd": 2.045,
+      "rmsDiff": 0.02,
+      "isAcceptable": true,
+      "useASR": true,
+      "duration": 2.711
+    },
+    "/audio/Trombone/Standard/Soft Layer/TB Soft C4.wav": {
+      "loopStart": 0.97,
+      "loopEnd": 1.767,
+      "rmsDiff": 0.183,
+      "isAcceptable": false,
+      "useASR": true,
+      "duration": 2.736
+    },
+    "/audio/Trombone/Standard/Soft Layer/TB Soft D2.wav": {
+      "loopStart": 0.656,
+      "loopEnd": 1.702,
+      "rmsDiff": 0,
+      "isAcceptable": true,
+      "useASR": true,
+      "duration": 2.435
+    },
+    "/audio/Trombone/Standard/Soft Layer/TB Soft D3.wav": {
+      "loopStart": 0.906,
+      "loopEnd": 2.121,
+      "rmsDiff": 0,
+      "isAcceptable": true,
+      "useASR": true,
+      "duration": 2.84
+    },
+    "/audio/Trombone/Standard/Soft Layer/TB Soft D4.wav": {
+      "loopStart": 1.017,
+      "loopEnd": 1.996,
+      "rmsDiff": 0.169,
+      "isAcceptable": false,
+      "useASR": true,
+      "duration": 3.065
+    },
+    "/audio/Trombone/Standard/Soft Layer/TB Soft E2.wav": {
+      "loopStart": 0.741,
+      "loopEnd": 1.776,
+      "rmsDiff": 0,
+      "isAcceptable": true,
+      "useASR": true,
+      "duration": 2.638
+    },
+    "/audio/Trombone/Standard/Soft Layer/TB Soft E3.wav": {
+      "loopStart": 1.012,
+      "loopEnd": 2.136,
+      "rmsDiff": 0.013,
+      "isAcceptable": true,
+      "useASR": true,
+      "duration": 2.935
+    },
+    "/audio/Trombone/Standard/Soft Layer/TB Soft E4.wav": {
+      "loopStart": 0.993,
+      "loopEnd": 2.168,
+      "rmsDiff": 0.16,
+      "isAcceptable": false,
+      "useASR": true,
+      "duration": 2.912
+    },
+    "/audio/Trombone/Standard/Soft Layer/TB Soft F2.wav": {
+      "loopStart": 0.803,
+      "loopEnd": 1.745,
+      "rmsDiff": 0,
+      "isAcceptable": true,
+      "useASR": true,
+      "duration": 2.464
+    },
+    "/audio/Trombone/Standard/Soft Layer/TB Soft F3.wav": {
+      "loopStart": 0.765,
+      "loopEnd": 1.679,
+      "rmsDiff": 0,
+      "isAcceptable": true,
+      "useASR": true,
+      "duration": 2.504
+    },
+    "/audio/Trombone/Standard/Soft Layer/TB Soft F4.wav": {
+      "loopStart": 0.59,
+      "loopEnd": 1.446,
+      "rmsDiff": 0,
+      "isAcceptable": true,
+      "useASR": true,
+      "duration": 2.189
+    },
+    "/audio/Trombone/Standard/Soft Layer/TB Soft G2.wav": {
+      "loopStart": 0.992,
+      "loopEnd": 2.058,
+      "rmsDiff": 0,
+      "isAcceptable": true,
+      "useASR": true,
+      "duration": 2.955
+    },
+    "/audio/Trombone/Standard/Soft Layer/TB Soft G3.wav": {
+      "loopStart": 0.91,
+      "loopEnd": 2.185,
+      "rmsDiff": 0,
+      "isAcceptable": true,
+      "useASR": true,
+      "duration": 2.922
+    },
+    "/audio/Trombone/Standard/Soft Layer/TB Soft G4.wav": {
+      "loopStart": 0.782,
+      "loopEnd": 2.107,
+      "rmsDiff": 0.008,
+      "isAcceptable": true,
+      "useASR": true,
+      "duration": 3.107
+    },
+    "/audio/Trombone/Harmo Mute/Hard Layer/Mute TB Hard A2.wav": {
+      "loopStart": 0.814,
+      "loopEnd": 1.507,
+      "rmsDiff": 0,
+      "isAcceptable": true,
+      "useASR": true,
+      "duration": 2.276
+    },
+    "/audio/Trombone/Harmo Mute/Hard Layer/Mute TB Hard A3.wav": {
+      "loopStart": 0.966,
+      "loopEnd": 1.757,
+      "rmsDiff": 0.015,
+      "isAcceptable": true,
+      "useASR": true,
+      "duration": 2.721
+    },
+    "/audio/Trombone/Harmo Mute/Hard Layer/Mute TB Hard A4.wav": {
+      "loopStart": 0.837,
+      "loopEnd": 1.64,
+      "rmsDiff": 0.099,
+      "isAcceptable": false,
+      "useASR": true,
+      "duration": 2.292
+    },
+    "/audio/Trombone/Harmo Mute/Hard Layer/Mute TB Hard B2.wav": {
+      "loopStart": 0.822,
+      "loopEnd": 1.573,
+      "rmsDiff": 0,
+      "isAcceptable": true,
+      "useASR": true,
+      "duration": 2.401
+    },
+    "/audio/Trombone/Harmo Mute/Hard Layer/Mute TB Hard B3.wav": {
+      "loopStart": 0.996,
+      "loopEnd": 1.918,
+      "rmsDiff": 0.105,
+      "isAcceptable": false,
+      "useASR": true,
+      "duration": 2.841
+    },
+    "/audio/Trombone/Harmo Mute/Hard Layer/Mute TB Hard B4.wav": {
+      "loopStart": 0.775,
+      "loopEnd": 1.614,
+      "rmsDiff": 0.209,
+      "isAcceptable": false,
+      "useASR": true,
+      "duration": 2.286
+    },
+    "/audio/Trombone/Harmo Mute/Hard Layer/Mute TB Hard C3.wav": {
+      "loopStart": 0.489,
+      "loopEnd": 1.423,
+      "rmsDiff": 0,
+      "isAcceptable": true,
+      "useASR": true,
+      "duration": 1.991
+    },
+    "/audio/Trombone/Harmo Mute/Hard Layer/Mute TB Hard C4.wav": {
+      "loopStart": 0.951,
+      "loopEnd": 1.767,
+      "rmsDiff": 0.065,
+      "isAcceptable": false,
+      "useASR": true,
+      "duration": 2.724
+    },
+    "/audio/Trombone/Harmo Mute/Hard Layer/Mute TB Hard D2.wav": {
+      "loopStart": 0.771,
+      "loopEnd": 1.341,
+      "rmsDiff": 0,
+      "isAcceptable": true,
+      "useASR": true,
+      "duration": 2.087
+    },
+    "/audio/Trombone/Harmo Mute/Hard Layer/Mute TB Hard D3.wav": {
+      "loopStart": 0.86,
+      "loopEnd": 1.638,
+      "rmsDiff": 0.018,
+      "isAcceptable": true,
+      "useASR": true,
+      "duration": 2.403
+    },
+    "/audio/Trombone/Harmo Mute/Hard Layer/Mute TB Hard D4.wav": {
+      "loopStart": 0.83,
+      "loopEnd": 1.469,
+      "rmsDiff": 0.061,
+      "isAcceptable": false,
+      "useASR": true,
+      "duration": 2.31
+    },
+    "/audio/Trombone/Harmo Mute/Hard Layer/Mute TB Hard E2.wav": {
+      "loopStart": 0.559,
+      "loopEnd": 1.356,
+      "rmsDiff": 0,
+      "isAcceptable": true,
+      "useASR": true,
+      "duration": 2.109
+    },
+    "/audio/Trombone/Harmo Mute/Hard Layer/Mute TB Hard E3.wav": {
+      "loopStart": 0.735,
+      "loopEnd": 2.164,
+      "rmsDiff": 0,
+      "isAcceptable": true,
+      "useASR": true,
+      "duration": 2.938
+    },
+    "/audio/Trombone/Harmo Mute/Hard Layer/Mute TB Hard E4.wav": {
+      "loopStart": 0.748,
+      "loopEnd": 1.476,
+      "rmsDiff": 0,
+      "isAcceptable": true,
+      "useASR": true,
+      "duration": 2.054
+    },
+    "/audio/Trombone/Harmo Mute/Hard Layer/Mute TB Hard F2.wav": {
+      "loopStart": 0.593,
+      "loopEnd": 1.401,
+      "rmsDiff": 0,
+      "isAcceptable": true,
+      "useASR": true,
+      "duration": 1.899
+    },
+    "/audio/Trombone/Harmo Mute/Hard Layer/Mute TB Hard F3.wav": {
+      "loopStart": 0.744,
+      "loopEnd": 1.424,
+      "rmsDiff": 0.025,
+      "isAcceptable": true,
+      "useASR": true,
+      "duration": 2.234
+    },
+    "/audio/Trombone/Harmo Mute/Hard Layer/Mute TB Hard F4.wav": {
+      "loopStart": 0.956,
+      "loopEnd": 1.779,
+      "rmsDiff": 0.026,
+      "isAcceptable": true,
+      "useASR": true,
+      "duration": 2.701
+    },
+    "/audio/Trombone/Harmo Mute/Hard Layer/Mute TB Hard G2.wav": {
+      "loopStart": 0.769,
+      "loopEnd": 1.538,
+      "rmsDiff": 0,
+      "isAcceptable": true,
+      "useASR": true,
+      "duration": 2.152
+    },
+    "/audio/Trombone/Harmo Mute/Hard Layer/Mute TB Hard G3.wav": {
+      "loopStart": 0.844,
+      "loopEnd": 1.891,
+      "rmsDiff": 0.141,
+      "isAcceptable": false,
+      "useASR": true,
+      "duration": 2.594
+    },
+    "/audio/Trombone/Harmo Mute/Hard Layer/Mute TB Hard G4.wav": {
+      "loopStart": 0.973,
+      "loopEnd": 1.806,
+      "rmsDiff": 0.085,
+      "isAcceptable": false,
+      "useASR": true,
+      "duration": 2.794
+    },
+    "/audio/Trombone/Harmo Mute/Soft Layer/Mute TB Soft A2.wav": {
+      "loopStart": 1.239,
+      "loopEnd": 2.568,
+      "rmsDiff": 0,
+      "isAcceptable": true,
+      "useASR": true,
+      "duration": 3.666
+    },
+    "/audio/Trombone/Harmo Mute/Soft Layer/Mute TB Soft A3.wav": {
+      "loopStart": 0.724,
+      "loopEnd": 2.117,
+      "rmsDiff": 0.038,
+      "isAcceptable": true,
+      "useASR": true,
+      "duration": 2.813
+    },
+    "/audio/Trombone/Harmo Mute/Soft Layer/Mute TB Soft A4.wav": {
+      "loopStart": 0.81,
+      "loopEnd": 1.695,
+      "rmsDiff": 0.133,
+      "isAcceptable": false,
+      "useASR": true,
+      "duration": 2.596
+    },
+    "/audio/Trombone/Harmo Mute/Soft Layer/Mute TB Soft B2.wav": {
+      "loopStart": 1.087,
+      "loopEnd": 2.145,
+      "rmsDiff": 0.23,
+      "isAcceptable": false,
+      "useASR": true,
+      "duration": 3.138
+    },
+    "/audio/Trombone/Harmo Mute/Soft Layer/Mute TB Soft B3.wav": {
+      "loopStart": 1.063,
+      "loopEnd": 2.285,
+      "rmsDiff": 0.019,
+      "isAcceptable": true,
+      "useASR": true,
+      "duration": 3.054
+    },
+    "/audio/Trombone/Harmo Mute/Soft Layer/Mute TB Soft B4.wav": {
+      "loopStart": 0.631,
+      "loopEnd": 1.141,
+      "rmsDiff": 0.194,
+      "isAcceptable": false,
+      "useASR": true,
+      "duration": 1.605
+    },
+    "/audio/Trombone/Harmo Mute/Soft Layer/Mute TB Soft C3.wav": {
+      "loopStart": 0.883,
+      "loopEnd": 2.225,
+      "rmsDiff": 0.004,
+      "isAcceptable": true,
+      "useASR": true,
+      "duration": 2.966
+    },
+    "/audio/Trombone/Harmo Mute/Soft Layer/Mute TB Soft C4.wav": {
+      "loopStart": 0.957,
+      "loopEnd": 2.156,
+      "rmsDiff": 0,
+      "isAcceptable": true,
+      "useASR": true,
+      "duration": 2.964
+    },
+    "/audio/Trombone/Harmo Mute/Soft Layer/Mute TB Soft D2.wav": {
+      "loopStart": 0.85,
+      "loopEnd": 2.122,
+      "rmsDiff": 0,
+      "isAcceptable": true,
+      "useASR": true,
+      "duration": 3.054
+    },
+    "/audio/Trombone/Harmo Mute/Soft Layer/Mute TB Soft D3.wav": {
+      "loopStart": 0.796,
+      "loopEnd": 1.956,
+      "rmsDiff": 0,
+      "isAcceptable": true,
+      "useASR": true,
+      "duration": 2.789
+    },
+    "/audio/Trombone/Harmo Mute/Soft Layer/Mute TB Soft D4.wav": {
+      "loopStart": 0.802,
+      "loopEnd": 2.076,
+      "rmsDiff": 0,
+      "isAcceptable": true,
+      "useASR": true,
+      "duration": 2.934
+    },
+    "/audio/Trombone/Harmo Mute/Soft Layer/Mute TB Soft E2.wav": {
+      "loopStart": 1.036,
+      "loopEnd": 2.033,
+      "rmsDiff": 0,
+      "isAcceptable": true,
+      "useASR": true,
+      "duration": 2.976
+    },
+    "/audio/Trombone/Harmo Mute/Soft Layer/Mute TB Soft E3.wav": {
+      "loopStart": 1.039,
+      "loopEnd": 2.125,
+      "rmsDiff": 0.23,
+      "isAcceptable": false,
+      "useASR": true,
+      "duration": 3.224
+    },
+    "/audio/Trombone/Harmo Mute/Soft Layer/Mute TB Soft E4.wav": {
+      "loopStart": 0.835,
+      "loopEnd": 2.139,
+      "rmsDiff": 0.105,
+      "isAcceptable": false,
+      "useASR": true,
+      "duration": 2.843
+    },
+    "/audio/Trombone/Harmo Mute/Soft Layer/Mute TB Soft F2.wav": {
+      "loopStart": 0.879,
+      "loopEnd": 2.031,
+      "rmsDiff": 0,
+      "isAcceptable": true,
+      "useASR": true,
+      "duration": 3.09
+    },
+    "/audio/Trombone/Harmo Mute/Soft Layer/Mute TB Soft F3.wav": {
+      "loopStart": 1.009,
+      "loopEnd": 1.942,
+      "rmsDiff": 0,
+      "isAcceptable": true,
+      "useASR": true,
+      "duration": 2.946
+    },
+    "/audio/Trombone/Harmo Mute/Soft Layer/Mute TB Soft F4.wav": {
+      "loopStart": 1.166,
+      "loopEnd": 2.424,
+      "rmsDiff": 0.138,
+      "isAcceptable": false,
+      "useASR": true,
+      "duration": 3.455
+    },
+    "/audio/Trombone/Harmo Mute/Soft Layer/Mute TB Soft G2.wav": {
+      "loopStart": 0.937,
+      "loopEnd": 2.657,
+      "rmsDiff": 0,
+      "isAcceptable": true,
+      "useASR": true,
+      "duration": 3.611
+    },
+    "/audio/Trombone/Harmo Mute/Soft Layer/Mute TB Soft G3.wav": {
+      "loopStart": 0.761,
+      "loopEnd": 2.1,
+      "rmsDiff": 0,
+      "isAcceptable": true,
+      "useASR": true,
+      "duration": 3.038
+    },
+    "/audio/Trombone/Harmo Mute/Soft Layer/Mute TB Soft G4.wav": {
+      "loopStart": 0.828,
+      "loopEnd": 1.965,
+      "rmsDiff": 0,
+      "isAcceptable": true,
+      "useASR": true,
+      "duration": 2.916
+    },
+    "/audio/Cello Soft/Cello softA1.wav": {
+      "loopStart": 1.311,
+      "loopEnd": 2.655,
+      "rmsDiff": 0,
+      "isAcceptable": true,
+      "useASR": true,
+      "duration": 3.874
+    },
+    "/audio/Cello Soft/Cello softA2.wav": {
+      "loopStart": 1.115,
+      "loopEnd": 2.945,
+      "rmsDiff": 0,
+      "isAcceptable": true,
+      "useASR": true,
+      "duration": 4.191
+    },
+    "/audio/Cello Soft/Cello softA3.wav": {
+      "loopStart": 1.259,
+      "loopEnd": 2.708,
+      "rmsDiff": 0,
+      "isAcceptable": true,
+      "useASR": true,
+      "duration": 3.952
+    },
+    "/audio/Cello Soft/Cello softA4.wav": {
+      "loopStart": 1.207,
+      "loopEnd": 2.584,
+      "rmsDiff": 0,
+      "isAcceptable": true,
+      "useASR": true,
+      "duration": 3.667
+    },
+    "/audio/Cello Soft/Cello softB1.wav": {
+      "loopStart": 1.203,
+      "loopEnd": 2.738,
+      "rmsDiff": 0.352,
+      "isAcceptable": false,
+      "useASR": true,
+      "duration": 4.126
+    },
+    "/audio/Cello Soft/Cello softB2.wav": {
+      "loopStart": 1.005,
+      "loopEnd": 2.612,
+      "rmsDiff": 0,
+      "isAcceptable": true,
+      "useASR": true,
+      "duration": 3.764
+    },
+    "/audio/Cello Soft/Cello softB3.wav": {
+      "loopStart": 1.067,
+      "loopEnd": 2.665,
+      "rmsDiff": 0,
+      "isAcceptable": true,
+      "useASR": true,
+      "duration": 3.864
+    },
+    "/audio/Cello Soft/Cello softB4.wav": {
+      "loopStart": 0.859,
+      "loopEnd": 2.25,
+      "rmsDiff": 0,
+      "isAcceptable": true,
+      "useASR": true,
+      "duration": 3.217
+    },
+    "/audio/Cello Soft/Cello softC1.wav": {
+      "loopStart": 1.169,
+      "loopEnd": 2.929,
+      "rmsDiff": 0.109,
+      "isAcceptable": false,
+      "useASR": true,
+      "duration": 4.369
+    },
+    "/audio/Cello Soft/Cello softC2.wav": {
+      "loopStart": 1.836,
+      "loopEnd": 3.926,
+      "rmsDiff": 1.056,
+      "isAcceptable": false,
+      "useASR": true,
+      "duration": 5.823
+    },
+    "/audio/Cello Soft/Cello softC3.wav": {
+      "loopStart": 1.058,
+      "loopEnd": 2.707,
+      "rmsDiff": 0,
+      "isAcceptable": true,
+      "useASR": true,
+      "duration": 3.968
+    },
+    "/audio/Cello Soft/Cello softC4.wav": {
+      "loopStart": 0.999,
+      "loopEnd": 2.474,
+      "rmsDiff": 0,
+      "isAcceptable": true,
+      "useASR": true,
+      "duration": 3.589
+    },
+    "/audio/Cello Soft/Cello softC5.wav": {
+      "loopStart": 0.969,
+      "loopEnd": 2.36,
+      "rmsDiff": 0,
+      "isAcceptable": true,
+      "useASR": true,
+      "duration": 3.409
+    },
+    "/audio/Cello Soft/Cello softD1.wav": {
+      "loopStart": 1.498,
+      "loopEnd": 3.214,
+      "rmsDiff": 0.419,
+      "isAcceptable": false,
+      "useASR": true,
+      "duration": 4.555
+    },
+    "/audio/Cello Soft/Cello softD2.wav": {
+      "loopStart": 1.149,
+      "loopEnd": 2.943,
+      "rmsDiff": 0,
+      "isAcceptable": true,
+      "useASR": true,
+      "duration": 4.302
+    },
+    "/audio/Cello Soft/Cello softD3.wav": {
+      "loopStart": 1.406,
+      "loopEnd": 3.315,
+      "rmsDiff": 0.166,
+      "isAcceptable": false,
+      "useASR": true,
+      "duration": 4.941
+    },
+    "/audio/Cello Soft/Cello softD4.wav": {
+      "loopStart": 1.101,
+      "loopEnd": 2.464,
+      "rmsDiff": 0,
+      "isAcceptable": true,
+      "useASR": true,
+      "duration": 3.717
+    },
+    "/audio/Cello Soft/Cello softE1.wav": {
+      "loopStart": 1.352,
+      "loopEnd": 2.682,
+      "rmsDiff": 0.003,
+      "isAcceptable": true,
+      "useASR": true,
+      "duration": 4.037
+    },
+    "/audio/Cello Soft/Cello softE2.wav": {
+      "loopStart": 1.075,
+      "loopEnd": 2.766,
+      "rmsDiff": 0,
+      "isAcceptable": true,
+      "useASR": true,
+      "duration": 4.049
+    },
+    "/audio/Cello Soft/Cello softE3.wav": {
+      "loopStart": 1.348,
+      "loopEnd": 3.14,
+      "rmsDiff": 0,
+      "isAcceptable": true,
+      "useASR": true,
+      "duration": 4.414
+    },
+    "/audio/Cello Soft/Cello softE4.wav": {
+      "loopStart": 0.988,
+      "loopEnd": 2.133,
+      "rmsDiff": 0,
+      "isAcceptable": true,
+      "useASR": true,
+      "duration": 3.261
+    },
+    "/audio/Cello Soft/Cello softF1.wav": {
+      "loopStart": 1.409,
+      "loopEnd": 2.877,
+      "rmsDiff": 0,
+      "isAcceptable": true,
+      "useASR": true,
+      "duration": 4.233
+    },
+    "/audio/Cello Soft/Cello softF2.wav": {
+      "loopStart": 1.039,
+      "loopEnd": 2.753,
+      "rmsDiff": 0,
+      "isAcceptable": true,
+      "useASR": true,
+      "duration": 3.876
+    },
+    "/audio/Cello Soft/Cello softF3.wav": {
+      "loopStart": 1.201,
+      "loopEnd": 2.804,
+      "rmsDiff": 0,
+      "isAcceptable": true,
+      "useASR": true,
+      "duration": 4.083
+    },
+    "/audio/Cello Soft/Cello softF4.wav": {
+      "loopStart": 1.174,
+      "loopEnd": 2.585,
+      "rmsDiff": 0,
+      "isAcceptable": true,
+      "useASR": true,
+      "duration": 3.636
+    },
+    "/audio/Cello Soft/Cello softG1.wav": {
+      "loopStart": 1.205,
+      "loopEnd": 3.049,
+      "rmsDiff": 0.16,
+      "isAcceptable": false,
+      "useASR": true,
+      "duration": 4.505
+    },
+    "/audio/Cello Soft/Cello softG2.wav": {
+      "loopStart": 1.352,
+      "loopEnd": 3.315,
+      "rmsDiff": 0,
+      "isAcceptable": true,
+      "useASR": true,
+      "duration": 4.822
+    },
+    "/audio/Cello Soft/Cello softG3.wav": {
+      "loopStart": 1.202,
+      "loopEnd": 2.672,
+      "rmsDiff": 0,
+      "isAcceptable": true,
+      "useASR": true,
+      "duration": 3.87
+    },
+    "/audio/Cello Soft/Cello softG4.wav": {
+      "loopStart": 1.023,
+      "loopEnd": 2.212,
+      "rmsDiff": 0,
+      "isAcceptable": true,
+      "useASR": true,
+      "duration": 3.317
+    },
+    "/audio/Viola Soft/Viola Soft A2.wav": {
+      "loopStart": 1.466,
+      "loopEnd": 3.278,
+      "rmsDiff": 0.138,
+      "isAcceptable": false,
+      "useASR": true,
+      "duration": 4.889
+    },
+    "/audio/Viola Soft/Viola Soft A3.wav": {
+      "loopStart": 1.36,
+      "loopEnd": 3.11,
+      "rmsDiff": 0,
+      "isAcceptable": true,
+      "useASR": true,
+      "duration": 4.501
+    },
+    "/audio/Viola Soft/Viola Soft A4.wav": {
+      "loopStart": 1.234,
+      "loopEnd": 3.054,
+      "rmsDiff": 0,
+      "isAcceptable": true,
+      "useASR": true,
+      "duration": 4.534
+    },
+    "/audio/Viola Soft/Viola Soft B2.wav": {
+      "loopStart": 1.5,
+      "loopEnd": 3.614,
+      "rmsDiff": 0.014,
+      "isAcceptable": true,
+      "useASR": true,
+      "duration": 5.315
+    },
+    "/audio/Viola Soft/Viola Soft B3.wav": {
+      "loopStart": 1.195,
+      "loopEnd": 2.952,
+      "rmsDiff": 0,
+      "isAcceptable": true,
+      "useASR": true,
+      "duration": 4.269
+    },
+    "/audio/Viola Soft/Viola Soft B4.wav": {
+      "loopStart": 1.22,
+      "loopEnd": 2.71,
+      "rmsDiff": 0.017,
+      "isAcceptable": true,
+      "useASR": true,
+      "duration": 4.055
+    },
+    "/audio/Viola Soft/Viola Soft C2.wav": {
+      "loopStart": 1.562,
+      "loopEnd": 3.378,
+      "rmsDiff": 0.278,
+      "isAcceptable": false,
+      "useASR": true,
+      "duration": 5.021
+    },
+    "/audio/Viola Soft/Viola Soft C3.wav": {
+      "loopStart": 1.983,
+      "loopEnd": 4.573,
+      "rmsDiff": 0.41,
+      "isAcceptable": false,
+      "useASR": true,
+      "duration": 6.545
+    },
+    "/audio/Viola Soft/Viola Soft C4.wav": {
+      "loopStart": 1.241,
+      "loopEnd": 2.815,
+      "rmsDiff": 0,
+      "isAcceptable": true,
+      "useASR": true,
+      "duration": 4.151
+    },
+    "/audio/Viola Soft/Viola Soft C5.wav": {
+      "loopStart": 1,
+      "loopEnd": 2.615,
+      "rmsDiff": 0,
+      "isAcceptable": true,
+      "useASR": true,
+      "duration": 3.739
+    },
+    "/audio/Viola Soft/Viola Soft D2.wav": {
+      "loopStart": 1.682,
+      "loopEnd": 3.734,
+      "rmsDiff": 0,
+      "isAcceptable": true,
+      "useASR": true,
+      "duration": 5.429
+    },
+    "/audio/Viola Soft/Viola Soft D3.wav": {
+      "loopStart": 1.797,
+      "loopEnd": 4.119,
+      "rmsDiff": 0,
+      "isAcceptable": true,
+      "useASR": true,
+      "duration": 6.084
+    },
+    "/audio/Viola Soft/Viola Soft D4.wav": {
+      "loopStart": 1.12,
+      "loopEnd": 2.838,
+      "rmsDiff": 0.026,
+      "isAcceptable": true,
+      "useASR": true,
+      "duration": 4.205
+    },
+    "/audio/Viola Soft/Viola Soft E2.wav": {
+      "loopStart": 1.611,
+      "loopEnd": 3.392,
+      "rmsDiff": 0,
+      "isAcceptable": true,
+      "useASR": true,
+      "duration": 5.06
+    },
+    "/audio/Viola Soft/Viola Soft E3.wav": {
+      "loopStart": 1.524,
+      "loopEnd": 3.516,
+      "rmsDiff": 0,
+      "isAcceptable": true,
+      "useASR": true,
+      "duration": 5.08
+    },
+    "/audio/Viola Soft/Viola Soft E4.wav": {
+      "loopStart": 1.206,
+      "loopEnd": 2.942,
+      "rmsDiff": 0.11,
+      "isAcceptable": false,
+      "useASR": true,
+      "duration": 4.087
+    },
+    "/audio/Viola Soft/Viola Soft F2.wav": {
+      "loopStart": 1.417,
+      "loopEnd": 3.504,
+      "rmsDiff": 0,
+      "isAcceptable": true,
+      "useASR": true,
+      "duration": 4.884
+    },
+    "/audio/Viola Soft/Viola Soft F3.wav": {
+      "loopStart": 1.439,
+      "loopEnd": 3.284,
+      "rmsDiff": 0,
+      "isAcceptable": true,
+      "useASR": true,
+      "duration": 4.686
+    },
+    "/audio/Viola Soft/Viola Soft F4.wav": {
+      "loopStart": 1.416,
+      "loopEnd": 3.234,
+      "rmsDiff": 0,
+      "isAcceptable": true,
+      "useASR": true,
+      "duration": 4.427
+    },
+    "/audio/Viola Soft/Viola Soft G2.wav": {
+      "loopStart": 1.761,
+      "loopEnd": 4.152,
+      "rmsDiff": 0,
+      "isAcceptable": true,
+      "useASR": true,
+      "duration": 5.764
+    },
+    "/audio/Viola Soft/Viola Soft G3.wav": {
+      "loopStart": 1.304,
+      "loopEnd": 3.063,
+      "rmsDiff": 0,
+      "isAcceptable": true,
+      "useASR": true,
+      "duration": 4.581
+    },
+    "/audio/Viola Soft/Viola Soft G4.wav": {
+      "loopStart": 1.122,
+      "loopEnd": 2.759,
+      "rmsDiff": 0,
+      "isAcceptable": true,
+      "useASR": true,
+      "duration": 4.147
+    }
+  }
+}
