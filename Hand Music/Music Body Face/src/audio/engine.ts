@@ -7,6 +7,14 @@ import * as Tone from "tone";
 
 // Debug logging (set to false to silence)
 const DEBUG_AUDIO = true;
+// Latency measurement logging (filter console with "[LATENCY]")
+const DEBUG_LATENCY = true;
+
+// Global for measuring gesture-to-sound latency (set from App.svelte)
+export let latencyGestureTime = 0;
+export function setLatencyGestureTime(t: number): void {
+  latencyGestureTime = t;
+}
 
 // Reverb enable (tied to visual trail length mapping in App). Toggle for debugging.
 const ENABLE_REVERB = true;
@@ -86,6 +94,10 @@ export interface AudioEngine {
   sourceGain1: GainNode | null; // Gain for first source (crossfade)
   sourceGain2: GainNode | null; // Gain for second source (crossfade)
   pitchShift: Tone.PitchShift | null;
+  // PitchShift bypass: when vibrato is inactive, route through bypass for ~45ms less latency
+  pitchShiftGain: GainNode | null; // Gain after pitch shift (for crossfade)
+  bypassGain: GainNode | null; // Bypass path gain (for crossfade)
+  pitchShiftActive: boolean; // Track whether pitch shift is currently engaged
   filter: Tone.Filter | null; // Lowpass filter for wah effect
   delay: Tone.FeedbackDelay | null; // Feedback delay for echo effect
   reverb: Tone.JCReverb | null;
@@ -160,6 +172,20 @@ let samplesByGroupSorted: Map<SampleGroup, SampleInfo[]> = new Map();
 let brassSamplesByGroupAndLayerSorted: Map<string, SampleInfo[]> = new Map();
 let samplesLoaded = false;
 
+// Pre-computed loop points from manifest (eliminates ~20-50ms per sample load)
+interface PrecomputedLoopPoints {
+  loopStart: number;
+  loopEnd: number;
+  rmsDiff: number;
+  isAcceptable: boolean;
+  useASR: boolean;
+  duration: number;
+}
+let precomputedLoopPoints: Map<string, PrecomputedLoopPoints> = new Map();
+
+// Sample buffer cache for preloading (eliminates fetch+decode latency)
+const sampleBufferCache: Map<string, AudioBuffer> = new Map();
+
 /**
  * Parse note name and octave from filename.
  * Supports multiple formats:
@@ -224,10 +250,33 @@ function parseLayerFromPath(folderPath: string): ArticulationLayer {
  */
 async function loadSampleManifest(): Promise<void> {
   if (samplesLoaded) return;
-  
+
   try {
-    const response = await fetch("/audio/manifest.json");
-    const manifest: Record<string, string[]> = await response.json();
+    // Try to load manifest with pre-computed loop points first
+    let manifest: Record<string, string[]>;
+    let loopPointsData: Record<string, PrecomputedLoopPoints> | null = null;
+
+    try {
+      const response = await fetch("/audio/manifest-with-loops.json");
+      const extendedManifest = await response.json();
+      manifest = extendedManifest.files;
+      loopPointsData = extendedManifest.loopPoints;
+      if (DEBUG_LATENCY) {
+        console.log(`[LATENCY] Loaded manifest with ${Object.keys(loopPointsData || {}).length} pre-computed loop points`);
+      }
+    } catch {
+      // Fall back to original manifest
+      const response = await fetch("/audio/manifest.json");
+      manifest = await response.json();
+      console.log("Using original manifest (no pre-computed loop points)");
+    }
+
+    // Store pre-computed loop points
+    if (loopPointsData) {
+      for (const [path, points] of Object.entries(loopPointsData)) {
+        precomputedLoopPoints.set(path, points);
+      }
+    }
     
     samplesByGroupAndOctave = new Map();
     sortedOctavesByGroup = new Map();
@@ -509,6 +558,7 @@ function findOptimalLoopPoints(
   targetStart: number,
   targetEnd: number
 ): LoopPointResult {
+  const t0 = performance.now();
   const sampleRate = buffer.sampleRate;
   const channelData = buffer.getChannelData(0); // Use first channel
   
@@ -591,7 +641,11 @@ function findOptimalLoopPoints(
     `end ${endOffset >= 0 ? '+' : ''}${endOffset.toFixed(1)}ms (RMS: ${bestMatch.endRMS.toFixed(4)}), ` +
     `diff: ${(normalizedRmsDiff * 100).toFixed(1)}%, length: ${loopLength.toFixed(2)}s`
   );
-  
+
+  if (DEBUG_LATENCY) {
+    console.log(`[LATENCY] findOptimalLoopPoints: ${(performance.now() - t0).toFixed(0)}ms`);
+  }
+
   return {
     loopStart,
     loopEnd,
@@ -631,9 +685,85 @@ async function getRandomSample(): Promise<string> {
 }
 
 async function loadAudioBuffer(url: string): Promise<AudioBuffer> {
+  const t0 = performance.now();
   const response = await fetch(url);
+  const fetchTime = performance.now() - t0;
   const arrayBuffer = await response.arrayBuffer();
-  return await Tone.getContext().decodeAudioData(arrayBuffer);
+  const t1 = performance.now();
+  const buffer = await Tone.getContext().decodeAudioData(arrayBuffer);
+  const decodeTime = performance.now() - t1;
+  if (DEBUG_LATENCY) {
+    const filename = url.split('/').pop();
+    console.log(`[LATENCY] loadAudioBuffer "${filename}": fetch=${fetchTime.toFixed(0)}ms, decode=${decodeTime.toFixed(0)}ms, total=${(performance.now() - t0).toFixed(0)}ms`);
+  }
+  return buffer;
+}
+
+/**
+ * Preload commonly-used samples into the buffer cache.
+ * This eliminates fetch+decode latency (~50-200ms) on first note attack.
+ *
+ * Aggressive preloading: loads ALL samples for brass (default mode) to ensure
+ * zero latency on any pitch/layer combination during performance.
+ */
+async function preloadSamples(): Promise<void> {
+  const t0 = performance.now();
+
+  const samplesToPreload: string[] = [];
+
+  // Brass samples - preload ALL for zero-latency pitch changes during performance
+  const brassSamples = samplesByGroupSorted.get("brass:trombone") ?? [];
+  for (const sample of brassSamples) {
+    if (!samplesToPreload.includes(sample.path)) {
+      samplesToPreload.push(sample.path);
+    }
+  }
+
+  // Strings samples - preload all cello and viola samples
+  const celloSamples = samplesByGroupSorted.get("strings:cello") ?? [];
+  const violaSamples = samplesByGroupSorted.get("strings:viola") ?? [];
+  for (const sample of celloSamples) {
+    if (!samplesToPreload.includes(sample.path)) {
+      samplesToPreload.push(sample.path);
+    }
+  }
+  for (const sample of violaSamples) {
+    if (!samplesToPreload.includes(sample.path)) {
+      samplesToPreload.push(sample.path);
+    }
+  }
+
+  // Log sample counts for debugging
+  console.log(`[PRELOAD] Sample counts - brass: ${brassSamples.length}, cello: ${celloSamples.length}, viola: ${violaSamples.length}`);
+
+  if (samplesToPreload.length === 0) {
+    console.log("No samples to preload");
+    return;
+  }
+
+  console.log(`[PRELOAD] Aggressively preloading ${samplesToPreload.length} samples...`);
+
+  // Load samples in parallel with concurrency limit to avoid overwhelming the browser
+  const CONCURRENCY = 6;
+  let loaded = 0;
+
+  for (let i = 0; i < samplesToPreload.length; i += CONCURRENCY) {
+    const batch = samplesToPreload.slice(i, i + CONCURRENCY);
+    const results = await Promise.allSettled(
+      batch.map(async (path) => {
+        if (sampleBufferCache.has(path)) return; // Already cached
+        const buffer = await loadAudioBuffer(path);
+        sampleBufferCache.set(path, buffer);
+      })
+    );
+    loaded += results.filter(r => r.status === "fulfilled").length;
+  }
+
+  const elapsed = performance.now() - t0;
+
+  if (DEBUG_LATENCY) {
+    console.log(`[LATENCY] preloadSamples: ${loaded}/${samplesToPreload.length} loaded in ${elapsed.toFixed(0)}ms (aggressive mode)`);
+  }
 }
 
 export function createAudioEngine(): AudioEngine {
@@ -644,6 +774,9 @@ export function createAudioEngine(): AudioEngine {
     sourceGain1: null,
     sourceGain2: null,
     pitchShift: null,
+    pitchShiftGain: null,
+    bypassGain: null,
+    pitchShiftActive: false,
     filter: null,
     delay: null,
     reverb: null,
@@ -681,9 +814,12 @@ export async function startAudio(engine: AudioEngine): Promise<void> {
   // Minimize audio latency
   Tone.getContext().lookAhead = 0.005;
   console.log("Tone.js started, lookAhead:", Tone.getContext().lookAhead);
-  
-  // Load sample manifest for pitch-based selection
+
+  // Load sample manifest for pitch-based selection (includes pre-computed loop points)
   await loadSampleManifest();
+
+  // Preload commonly-used samples to eliminate first-note latency
+  await preloadSamples();
 
   // Create output chain:
   // sources -> pitchShift -> filter -> dryGain -> volume -> limiter -> dest
@@ -725,11 +861,11 @@ export async function startAudio(engine: AudioEngine): Promise<void> {
   
   const pitchShift = new Tone.PitchShift({
     pitch: 0,
-    // Larger window + tiny delay makes modulation smoother/less grainy
-    // (at the cost of a bit more latency).
-    windowSize: 0.08,
-    delayTime: 0.01,
-  }).connect(filter);
+    // Reduced window size for lower latency (~45ms reduction).
+    // Trade-off: slightly grainier vibrato at extreme settings.
+    windowSize: 0.04,
+    delayTime: 0.005,
+  });
 
   // Create crossfade gain nodes
   const ctx = Tone.getContext().rawContext;
@@ -737,14 +873,36 @@ export async function startAudio(engine: AudioEngine): Promise<void> {
   const sourceGain2 = ctx.createGain();
   sourceGain1.gain.value = 1;
   sourceGain2.gain.value = 0;
-  
-  // Connect source gains to pitch shift
+
+  // PitchShift bypass routing for lower latency when vibrato is inactive:
+  // sourceGains -> pitchShift -> pitchShiftGain -> filter (wet path, +~45ms latency)
+  // sourceGains -> bypassGain -> filter (dry path, zero added latency)
+  // When vibrato is inactive, bypass=1/pitchShift=0. When active, bypass=0/pitchShift=1.
+  const pitchShiftGain = ctx.createGain();
+  const bypassGain = ctx.createGain();
+  // Start with bypass active (no vibrato = low latency path)
+  pitchShiftGain.gain.value = 0;
+  bypassGain.gain.value = 1;
+
+  // Connect pitch shift path
   // @ts-ignore - Tone.js input is compatible with Web Audio
   sourceGain1.connect(pitchShift.input.input || pitchShift.input);
   // @ts-ignore
   sourceGain2.connect(pitchShift.input.input || pitchShift.input);
+  pitchShift.connect(pitchShiftGain);
+  // @ts-ignore
+  pitchShiftGain.connect(filter.input.input || filter.input);
+
+  // Connect bypass path (direct to filter, skipping pitchShift)
+  sourceGain1.connect(bypassGain);
+  sourceGain2.connect(bypassGain);
+  // @ts-ignore
+  bypassGain.connect(filter.input.input || filter.input);
 
   engine.pitchShift = pitchShift;
+  engine.pitchShiftGain = pitchShiftGain;
+  engine.bypassGain = bypassGain;
+  engine.pitchShiftActive = false; // Start with bypass (low latency)
   engine.filter = filter;
   engine.delay = delay;
   engine.reverb = reverb;
@@ -764,6 +922,7 @@ export async function startAudio(engine: AudioEngine): Promise<void> {
 }
 
 async function loadNewSample(engine: AudioEngine, retryCount: number = 0): Promise<void> {
+  const t0 = performance.now();
   // Choose which family of samples to use
   let group: SampleGroup = "brass:trombone";
   if (engine.instrumentMode === "strings") {
@@ -773,41 +932,72 @@ async function loadNewSample(engine: AudioEngine, retryCount: number = 0): Promi
   engine.currentGroup = group;
 
   const samplePath = getSampleByPitchGroupAndLayer(engine.lastHandY, group, engine.currentLayer, engine.pitchMode);
+  console.log(`[SAMPLE] Selection: handY=${engine.lastHandY.toFixed(2)}, layer=${engine.currentLayer}, path=${samplePath.split('/').pop()}`);
   // If we're already on the desired sample (and have a buffer), don't reload.
   if (engine.currentSample === samplePath && engine.buffer && engine.isLoaded) {
+    console.log(`[SAMPLE] Already loaded, skipping`);
     return;
   }
   engine.currentSample = samplePath;
-  
+
   try {
-    const buffer = await loadAudioBuffer(samplePath);
+    // Check buffer cache first (from preloading)
+    let buffer = sampleBufferCache.get(samplePath);
+    let fromCache = false;
+    if (buffer) {
+      fromCache = true;
+      if (DEBUG_LATENCY) {
+        console.log(`[LATENCY] Buffer cache HIT for "${samplePath.split('/').pop()}"`);
+      }
+    } else {
+      buffer = await loadAudioBuffer(samplePath);
+      // Store in cache for future use
+      sampleBufferCache.set(samplePath, buffer);
+    }
     const duration = buffer.duration;
-    
-    // Use ASR for long samples, one-shot for short ones
+
+    // Check for pre-computed loop points first (eliminates ~20-50ms)
+    const precomputed = precomputedLoopPoints.get(samplePath);
+    if (precomputed) {
+      engine.buffer = buffer;
+      engine.useASR = precomputed.useASR;
+      engine.loopStart = precomputed.loopStart;
+      engine.loopEnd = precomputed.loopEnd;
+      engine.isLoaded = true;
+
+      if (DEBUG_LATENCY) {
+        const elapsed = performance.now() - t0;
+        console.log(`[LATENCY] loadNewSample (precomputed): ${elapsed.toFixed(0)}ms${fromCache ? ' (cached)' : ''}`);
+      }
+      console.log(`✓ Sample loaded: ${duration.toFixed(2)}s (${precomputed.useASR ? 'ASR' : 'one-shot'}), loop: ${engine.loopStart.toFixed(3)}s - ${engine.loopEnd.toFixed(3)}s [precomputed]`);
+      return;
+    }
+
+    // Fall back to runtime loop point calculation
     const useASR = duration >= ASR_MIN_DURATION;
-    
+
     if (useASR) {
       // Calculate optimal loop points for ASR
       const targetStart = duration * LOOP_START_PERCENT;
       const targetEnd = duration * LOOP_END_PERCENT;
       const optimal = findOptimalLoopPoints(buffer, targetStart, targetEnd);
-      
+
       // Check if this sample meets quality thresholds
       if (!optimal.isAcceptable && retryCount < MAX_SAMPLE_RETRIES) {
         console.log(`Sample rejected (attempt ${retryCount + 1}/${MAX_SAMPLE_RETRIES}), trying another...`);
         await loadNewSample(engine, retryCount + 1);
         return;
       }
-      
+
       if (!optimal.isAcceptable) {
         console.warn(`Using sample despite poor loop quality (exhausted ${MAX_SAMPLE_RETRIES} retries)`);
       }
-      
+
       engine.buffer = buffer;
       engine.useASR = true;
       engine.loopStart = optimal.loopStart;
       engine.loopEnd = optimal.loopEnd;
-      console.log(`✓ Sample accepted: ${duration.toFixed(2)}s (ASR mode), loop: ${engine.loopStart.toFixed(3)}s - ${engine.loopEnd.toFixed(3)}s`);
+      console.log(`✓ Sample accepted: ${duration.toFixed(2)}s (ASR mode), loop: ${engine.loopStart.toFixed(3)}s - ${engine.loopEnd.toFixed(3)}s [computed]`);
     } else {
       // Short sample: no loop, always acceptable
       engine.buffer = buffer;
@@ -816,11 +1006,16 @@ async function loadNewSample(engine: AudioEngine, retryCount: number = 0): Promi
       engine.loopEnd = duration;
       console.log(`✓ Sample accepted: ${duration.toFixed(2)}s (one-shot mode)`);
     }
-    
+
+    if (DEBUG_LATENCY) {
+      const elapsed = performance.now() - t0;
+      console.log(`[LATENCY] loadNewSample (computed): ${elapsed.toFixed(0)}ms`);
+    }
+
     engine.isLoaded = true;
   } catch (err) {
     console.error("Failed to load sample:", err);
-    
+
     // Retry on load failure too
     if (retryCount < MAX_SAMPLE_RETRIES) {
       console.log(`Load failed, trying another sample...`);
@@ -855,8 +1050,10 @@ export function stopAudio(engine: AudioEngine): void {
   if (!engine.isRunning) return;
 
   stopCurrentSound(engine);
-  
+
   engine.pitchShift?.dispose();
+  engine.pitchShiftGain?.disconnect();
+  engine.bypassGain?.disconnect();
   engine.filter?.dispose();
   engine.reverb?.dispose();
   engine.gain?.dispose();
@@ -868,6 +1065,9 @@ export function stopAudio(engine: AudioEngine): void {
 
   engine.buffer = null;
   engine.pitchShift = null;
+  engine.pitchShiftGain = null;
+  engine.bypassGain = null;
+  engine.pitchShiftActive = false;
   engine.filter = null;
   engine.reverb = null;
   engine.gain = null;
@@ -971,6 +1171,10 @@ function createSource(engine: AudioEngine, startOffset: number, gainNode: GainNo
   source.start(when, startOffset);
   // Tag for debugging
   sourceId(source);
+  if (DEBUG_LATENCY && latencyGestureTime > 0) {
+    const elapsed = performance.now() - latencyGestureTime;
+    console.log(`[LATENCY] ▶ source.start() called: ${elapsed.toFixed(1)}ms after gesture (when=${when.toFixed(3)}s)`);
+  }
   return source;
 }
 
@@ -1049,9 +1253,14 @@ function performCrossfade(engine: AudioEngine): void {
 
 // Start playing the sample (attack phase)
 export function triggerAttack(engine: AudioEngine): void {
+  const attackStartTime = performance.now();
+  if (DEBUG_LATENCY && latencyGestureTime > 0) {
+    console.log(`[LATENCY] triggerAttack called: ${(attackStartTime - latencyGestureTime).toFixed(1)}ms after gesture`);
+  }
   if (DEBUG_AUDIO) dlog(engine, "attack() called");
   if (!engine.isRunning || !engine.isLoaded || !engine.buffer || !engine.sourceGain1) {
     dlog(engine, "Cannot trigger attack - not ready");
+    if (DEBUG_LATENCY) console.log(`[LATENCY] ⚠️ triggerAttack BLOCKED - buffer not ready`);
     return;
   }
 
@@ -1326,6 +1535,11 @@ export function triggerRelease(engine: AudioEngine): void {
   }
 }
 
+// Threshold for considering vibrato "active" (in semitones)
+const VIBRATO_ACTIVE_THRESHOLD = 0.008;
+// Crossfade time between bypass and pitch shift paths (seconds)
+const BYPASS_CROSSFADE_TIME = 0.025;
+
 export function updateAudioParams(engine: AudioEngine, params: AudioParams): void {
   if (!engine.isRunning || !engine.gain) return;
 
@@ -1340,6 +1554,35 @@ export function updateAudioParams(engine: AudioEngine, params: AudioParams): voi
       p.rampTo(target, 0.03);
     } else {
       engine.pitchShift.pitch = target;
+    }
+
+    // PitchShift bypass logic: when vibrato is inactive, route through bypass for lower latency
+    const vibratoActive = ENABLE_VIBRATO && Math.abs(target) > VIBRATO_ACTIVE_THRESHOLD;
+    if (engine.pitchShiftGain && engine.bypassGain) {
+      const ctx = Tone.getContext().rawContext;
+      const now = ctx.currentTime;
+
+      if (vibratoActive && !engine.pitchShiftActive) {
+        // Crossfade TO pitch shift path (vibrato just became active)
+        engine.pitchShiftActive = true;
+        engine.bypassGain.gain.setValueAtTime(engine.bypassGain.gain.value, now);
+        engine.bypassGain.gain.linearRampToValueAtTime(0, now + BYPASS_CROSSFADE_TIME);
+        engine.pitchShiftGain.gain.setValueAtTime(engine.pitchShiftGain.gain.value, now);
+        engine.pitchShiftGain.gain.linearRampToValueAtTime(1, now + BYPASS_CROSSFADE_TIME);
+        if (DEBUG_LATENCY) {
+          console.log(`[LATENCY] PitchShift ENGAGED (vibrato active)`);
+        }
+      } else if (!vibratoActive && engine.pitchShiftActive) {
+        // Crossfade TO bypass path (vibrato just became inactive)
+        engine.pitchShiftActive = false;
+        engine.pitchShiftGain.gain.setValueAtTime(engine.pitchShiftGain.gain.value, now);
+        engine.pitchShiftGain.gain.linearRampToValueAtTime(0, now + BYPASS_CROSSFADE_TIME);
+        engine.bypassGain.gain.setValueAtTime(engine.bypassGain.gain.value, now);
+        engine.bypassGain.gain.linearRampToValueAtTime(1, now + BYPASS_CROSSFADE_TIME);
+        if (DEBUG_LATENCY) {
+          console.log(`[LATENCY] PitchShift BYPASSED (lower latency)`);
+        }
+      }
     }
   }
 
@@ -1401,14 +1644,20 @@ export function getPlayState(engine: AudioEngine): PlayState {
 export function setHandY(engine: AudioEngine, handY: number): void {
   engine.lastHandY = handY;
 
-  // While idle, prefetch the sample that matches the current hand height.
-  // This makes the next ATTACK match Y more consistently (no "old" pitch hanging around).
+  // Prefetch samples based on hand position to reduce latency on next note.
+  // Now works both when idle (loads sample) AND when playing (pre-caches buffer).
   if (!engine.isRunning) return;
-  if (engine.playState !== "idle") return;
   if (!samplesLoaded) return;
 
   const desiredPath = getSampleByPitchGroupAndLayer(engine.lastHandY, engine.currentGroup, engine.currentLayer, engine.pitchMode);
-  if (desiredPath === engine.currentSample) return;
+
+  // If idle, we can load directly into the engine
+  const isIdle = engine.playState === "idle";
+
+  // If already the current sample (or already cached), skip
+  if (isIdle && desiredPath === engine.currentSample) return;
+  if (!isIdle && sampleBufferCache.has(desiredPath)) return;
+
   engine.prefetchTargetPath = desiredPath;
 
   if (engine.prefetchTimerId !== null) {
@@ -1418,22 +1667,35 @@ export function setHandY(engine: AudioEngine, handY: number): void {
 
   // Debounce to avoid reloading constantly while the hand is moving.
   const scheduledTarget = desiredPath;
+  const debounceMs = isIdle ? 60 : 100; // Slightly longer debounce when playing
+
   engine.prefetchTimerId = window.setTimeout(async () => {
     engine.prefetchTimerId = null;
     if (engine.prefetchInFlight) return;
     if (!engine.isRunning) return;
-    if (engine.playState !== "idle") return;
     if (!engine.prefetchTargetPath) return;
     if (engine.prefetchTargetPath !== scheduledTarget) return;
-    if (scheduledTarget === engine.currentSample) return;
 
     engine.prefetchInFlight = true;
     try {
-      await loadSpecificSample(engine, scheduledTarget);
+      if (engine.playState === "idle") {
+        // Idle: load directly into engine
+        if (scheduledTarget === engine.currentSample) return;
+        await loadSpecificSample(engine, scheduledTarget);
+      } else {
+        // Playing: just pre-cache the buffer so it's ready for next note
+        if (!sampleBufferCache.has(scheduledTarget)) {
+          if (DEBUG_LATENCY) {
+            console.log(`[LATENCY] Prefetching while playing: ${scheduledTarget.split('/').pop()}`);
+          }
+          const buffer = await loadAudioBuffer(scheduledTarget);
+          sampleBufferCache.set(scheduledTarget, buffer);
+        }
+      }
     } finally {
       engine.prefetchInFlight = false;
     }
-  }, 60);
+  }, debounceMs);
 }
 
 // Update articulation layer based on movement jerkiness

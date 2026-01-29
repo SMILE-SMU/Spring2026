@@ -8,6 +8,7 @@
     createTracker,
     initializeTracker,
     processFrame,
+    setNumHands,
   } from "../tracking/mediapipe";
 
   interface Props {
@@ -23,9 +24,13 @@
     return tracker.isReady;
   }
 
-  export async function initialize(performanceMode: boolean = false): Promise<void> {
-    await initializeTracker(tracker, performanceMode);
+  export async function initialize(numHands: number = 2): Promise<void> {
+    await initializeTracker(tracker, numHands);
     onReady?.();
+  }
+
+  export async function updateNumHands(numHands: number): Promise<void> {
+    await setNumHands(tracker, numHands);
   }
 
   export function process(video: HTMLVideoElement, timestamp: number): void {
