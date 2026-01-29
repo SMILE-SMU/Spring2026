@@ -1,4 +1,4 @@
-# Project: Music Body Face
+# Project: Hand Music
 
 ## Purpose
 A web app that will be a musical instrument for a specific work of music for the SMILE - Southern Methodist Interdisciplinary Live Ensemble. Movement drives musical events.
