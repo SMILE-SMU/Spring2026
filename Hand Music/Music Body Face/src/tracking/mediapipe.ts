@@ -84,10 +84,39 @@ export function createTracker(): Tracker {
 // Cache the vision fileset so we don't reload WASM on reinitialization
 let cachedVision: Awaited<ReturnType<typeof FilesetResolver.forVisionTasks>> | null = null;
 
+/**
+ * Check if WebGL is available. MediaPipe requires WebGL for video frame processing
+ * even when running inference on CPU.
+ */
+export function checkWebGLSupport(): { supported: boolean; error?: string } {
+  try {
+    const canvas = document.createElement('canvas');
+    const gl = canvas.getContext('webgl2') || canvas.getContext('webgl');
+    if (!gl) {
+      return {
+        supported: false,
+        error: 'WebGL is not available. This is usually caused by outdated graphics drivers or disabled hardware acceleration.'
+      };
+    }
+    return { supported: true };
+  } catch (e) {
+    return {
+      supported: false,
+      error: `WebGL check failed: ${e instanceof Error ? e.message : 'Unknown error'}`
+    };
+  }
+}
+
 export async function initializeTracker(
   tracker: Tracker,
   numHands: number = 2
 ): Promise<void> {
+  // Check WebGL support first - MediaPipe requires it even for CPU inference
+  const webglCheck = checkWebGLSupport();
+  if (!webglCheck.supported) {
+    throw new Error(`WebGL Required: ${webglCheck.error}\n\nTo fix this:\n1. Update your graphics drivers\n2. Enable hardware acceleration in your browser (Chrome: Settings → System → "Use hardware acceleration")\n3. Try a different browser (Chrome recommended)\n4. Check chrome://gpu for details`);
+  }
+
   // Reuse cached vision fileset if available
   if (!cachedVision) {
     cachedVision = await FilesetResolver.forVisionTasks(

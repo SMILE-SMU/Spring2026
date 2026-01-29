@@ -42,6 +42,9 @@
   let debugInfo = $state("");
   const DEBUG_HAND = true;
 
+  // Error display (e.g., WebGL not available)
+  let fatalError = $state<string | null>(null);
+
   // Per-hand tracking state (indexed by 0 or 1)
   interface HandState {
     smoothedPitch: number;
@@ -345,33 +348,41 @@
   // Handlers
   async function handleStart(): Promise<void> {
     isLoading = true;
+    fatalError = null;
 
-    // Initialize tracker if not ready
-    if (!trackerReady && trackerComponent) {
-      // In single-hand mode, only track 1 hand for lower latency
-      const numHands = singleHandMode ? 1 : 2;
-      await trackerComponent.initialize(numHands);
+    try {
+      // Initialize tracker if not ready
+      if (!trackerReady && trackerComponent) {
+        // In single-hand mode, only track 1 hand for lower latency
+        const numHands = singleHandMode ? 1 : 2;
+        await trackerComponent.initialize(numHands);
+      }
+
+      // Start video
+      if (videoComponent) {
+        await videoComponent.start();
+      }
+
+      // Start both audio engines (must be triggered by user gesture)
+      console.log("Starting audio engines...");
+      await audioComponent1?.start();
+      console.log("Audio 1 started");
+      await audioComponent2?.start();
+      console.log("Audio 2 started");
+
+      // Apply current instrument mode to both engines
+      audioComponent1?.setMode(instrumentMode);
+      audioComponent2?.setMode(instrumentMode);
+
+      // Apply current pitch mode to both engines (takes effect on next sample selection)
+      audioComponent1?.setPitch(pitchMode);
+      audioComponent2?.setPitch(pitchMode);
+    } catch (err) {
+      console.error("Failed to start:", err);
+      fatalError = err instanceof Error ? err.message : String(err);
+      isLoading = false;
+      return;
     }
-
-    // Start video
-    if (videoComponent) {
-      await videoComponent.start();
-    }
-
-    // Start both audio engines (must be triggered by user gesture)
-    console.log("Starting audio engines...");
-    await audioComponent1?.start();
-    console.log("Audio 1 started");
-    await audioComponent2?.start();
-    console.log("Audio 2 started");
-
-    // Apply current instrument mode to both engines
-    audioComponent1?.setMode(instrumentMode);
-    audioComponent2?.setMode(instrumentMode);
-
-    // Apply current pitch mode to both engines (takes effect on next sample selection)
-    audioComponent1?.setPitch(pitchMode);
-    audioComponent2?.setPitch(pitchMode);
 
     isLoading = false;
     isRunning = true;
@@ -959,6 +970,14 @@
     </p>
   </header>
 
+  {#if fatalError}
+    <section class="error-banner">
+      <h2>Unable to Start</h2>
+      <pre class="error-message">{fatalError}</pre>
+      <button onclick={() => fatalError = null}>Dismiss</button>
+    </section>
+  {/if}
+
   <section class="controls">
     <div class="control-row">
       {#if !isRunning}
@@ -1074,6 +1093,46 @@
     margin: 0.5rem 0 0;
     font-size: 0.875rem;
     color: #888;
+  }
+
+  .error-banner {
+    background: #3a1a1a;
+    border: 1px solid #ff4444;
+    border-radius: 8px;
+    padding: 1.5rem;
+    margin-bottom: 1.5rem;
+    max-width: 600px;
+    text-align: left;
+  }
+
+  .error-banner h2 {
+    margin: 0 0 1rem;
+    color: #ff6666;
+    font-size: 1.25rem;
+  }
+
+  .error-message {
+    background: #1a1a1a;
+    padding: 1rem;
+    border-radius: 4px;
+    font-size: 0.8rem;
+    line-height: 1.5;
+    white-space: pre-wrap;
+    word-break: break-word;
+    color: #ccc;
+    margin: 0 0 1rem;
+    max-height: 300px;
+    overflow-y: auto;
+  }
+
+  .error-banner button {
+    background: #ff4444;
+    border: none;
+    padding: 0.5rem 1rem;
+  }
+
+  .error-banner button:hover {
+    background: #ff6666;
   }
 
   .controls {
