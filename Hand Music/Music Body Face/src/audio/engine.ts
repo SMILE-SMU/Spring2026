@@ -4,6 +4,7 @@
  */
 
 import * as Tone from "tone";
+import { BOWED_STRING_PROCESSOR_NAME, ensureBowedStringWorklet } from "./bowed-string-processor";
 
 // Debug logging (set to false to silence)
 const DEBUG_AUDIO = true;
@@ -99,7 +100,7 @@ export interface AudioEngine {
   bypassGain: GainNode | null; // Bypass path gain (for crossfade)
   pitchShiftActive: boolean; // Track whether pitch shift is currently engaged
   filter: Tone.Filter | null; // Lowpass filter for wah effect
-  delay: Tone.FeedbackDelay | null; // Feedback delay for echo effect
+  delay: Tone.PingPongDelay | null; // Ping-pong delay for timbral widening
   reverb: Tone.JCReverb | null;
   gain: Tone.Gain | null; // dry gain (note amplitude)
   wetGain: Tone.Gain | null; // wet gain (reverb level, not tied to dry)
@@ -126,16 +127,23 @@ export interface AudioEngine {
   prefetchTimerId: number | null;
   prefetchTargetPath: string | null;
   prefetchInFlight: boolean;
+  // Bowed string worklet (strings mode physical model)
+  bowedStringNode: AudioWorkletNode | null;
+  bowedStringGain: GainNode | null;
+  isBowedStringActive: boolean;
 }
 
 export interface AudioParams {
   pitchShift: number;
-  gain: number;
+  gain: number; // brass: volume amplitude. strings: bow velocity
   filterCutoff: number; // 0-1, maps to frequency range for wah effect
   delayTime: number; // 0-1, maps to delay time (0 = no delay, 1 = max delay)
   feedback: number; // 0-1, maps to feedback amount
   reverbMix: number; // 0-0.75 (wet)
   reverbDecay: number; // seconds (tail length), typically <= 6
+  // Strings-mode physical model params (ignored in brass mode)
+  frequency?: number; // Hz, target pitch from hand Y
+  bowPosition?: number; // 0.02-0.5, bow contact point on string
 }
 
 // Sample categories to pick from
@@ -804,6 +812,9 @@ export function createAudioEngine(): AudioEngine {
     prefetchTimerId: null,
     prefetchTargetPath: null,
     prefetchInFlight: false,
+    bowedStringNode: null,
+    bowedStringGain: null,
+    isBowedStringActive: false,
   };
 }
 
@@ -814,6 +825,9 @@ export async function startAudio(engine: AudioEngine): Promise<void> {
   // Minimize audio latency
   Tone.getContext().lookAhead = 0.005;
   console.log("Tone.js started, lookAhead:", Tone.getContext().lookAhead);
+
+  // Register bowed string AudioWorklet processor (for strings mode physical model)
+  await ensureBowedStringWorklet(Tone.getContext().rawContext);
 
   // Load sample manifest for pitch-based selection (includes pre-computed loop points)
   await loadSampleManifest();
@@ -840,11 +854,13 @@ export async function startAudio(engine: AudioEngine): Promise<void> {
     : null;
   
   // Feedback delay for echo effect (DISABLED for now)
-  const delay = new Tone.FeedbackDelay({
-    delayTime: DELAY_MIN_TIME, // Start with minimal delay
-    feedback: 0, // Feedback disabled - no repeating echoes
-    wet: 0, // DISABLED - set to 0 to bypass delay
-    maxDelay: DELAY_MAX_TIME + 0.5, // Buffer for max delay
+  const delay = new Tone.PingPongDelay({
+    // Keep delay times short so this reads as timbral change (not "note timing"),
+    // while still being clearly audible as stereo widening/texture.
+    delayTime: DELAY_MIN_TIME,
+    feedback: 0.25,
+    wet: 0.22,
+    maxDelay: DELAY_MAX_TIME + 0.5,
   }).connect(dryGain);
   
   // Lowpass filter for wah effect - feed both dry + reverb
@@ -854,7 +870,7 @@ export async function startAudio(engine: AudioEngine): Promise<void> {
     Q: FILTER_Q,
     rolloff: -24, // Steeper rolloff for more pronounced effect
   });
-  filter.connect(dryGain); // bypass delay for now
+  filter.connect(delay);
   if (ENABLE_REVERB) {
     filter.connect(reverb!);
   }
@@ -912,6 +928,25 @@ export async function startAudio(engine: AudioEngine): Promise<void> {
   engine.volume = volume;
   engine.sourceGain1 = sourceGain1;
   engine.sourceGain2 = sourceGain2;
+  // Create bowed string worklet node (not connected to filter yet - brass is default)
+  const bowedStringNode = new AudioWorkletNode(ctx, BOWED_STRING_PROCESSOR_NAME, {
+    numberOfInputs: 0,
+    numberOfOutputs: 1,
+    outputChannelCount: [1],
+    parameterData: {
+      frequency: 220,
+      bowVelocity: 0,
+      bowForce: 0.5,
+      bowPosition: 0.12,
+    },
+  });
+  const bowedStringGain = ctx.createGain();
+  bowedStringGain.gain.value = 0.8;
+  bowedStringNode.connect(bowedStringGain);
+  engine.bowedStringNode = bowedStringNode;
+  engine.bowedStringGain = bowedStringGain;
+  engine.isBowedStringActive = false;
+
   engine.isRunning = true;
   engine.lastReverbDecay = 1;
   engine.lastReverbUpdateAt = Tone.now();
@@ -1046,10 +1081,80 @@ async function loadSpecificSample(engine: AudioEngine, samplePath: string): Prom
   engine.isLoaded = true;
 }
 
+/**
+ * Connect the bowed string worklet to the filter input, disconnecting the
+ * sample-playback path (pitchShift/bypass → filter).
+ */
+function connectBowedString(engine: AudioEngine): void {
+  if (engine.isBowedStringActive) return;
+  if (!engine.bowedStringGain || !engine.filter) return;
+
+  // Disconnect sample-playback paths from filter input
+  const filterInput = getToneInput(engine.filter);
+  if (filterInput) {
+    try { engine.pitchShiftGain?.disconnect(filterInput); } catch { /* not connected */ }
+    try { engine.bypassGain?.disconnect(filterInput); } catch { /* not connected */ }
+  }
+
+  // Connect worklet output gain to filter input
+  if (filterInput) {
+    engine.bowedStringGain.connect(filterInput);
+  }
+
+  engine.isBowedStringActive = true;
+  console.log("[audio] Bowed string worklet connected to signal chain");
+}
+
+/**
+ * Disconnect the bowed string worklet from the filter and reconnect the
+ * sample-playback path (pitchShift/bypass → filter).
+ */
+function disconnectBowedString(engine: AudioEngine): void {
+  if (!engine.isBowedStringActive) return;
+  if (!engine.bowedStringGain || !engine.filter) return;
+
+  const filterInput = getToneInput(engine.filter);
+  if (filterInput) {
+    try { engine.bowedStringGain.disconnect(filterInput); } catch { /* not connected */ }
+  }
+
+  // Reconnect sample-playback paths
+  if (filterInput) {
+    if (engine.pitchShiftGain) {
+      engine.pitchShiftGain.connect(filterInput);
+    }
+    if (engine.bypassGain) {
+      engine.bypassGain.connect(filterInput);
+    }
+  }
+
+  engine.isBowedStringActive = false;
+  console.log("[audio] Bowed string worklet disconnected, sample path restored");
+}
+
+/** Helper to get the underlying AudioNode input of a Tone.js node. */
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+function getToneInput(node: any): AudioNode | null {
+  if (node?.input?.input) return node.input.input;
+  if (node?.input) return node.input;
+  return null;
+}
+
 export function stopAudio(engine: AudioEngine): void {
   if (!engine.isRunning) return;
 
   stopCurrentSound(engine);
+
+  // Clean up bowed string worklet
+  if (engine.bowedStringNode) {
+    engine.bowedStringNode.disconnect();
+    engine.bowedStringNode = null;
+  }
+  if (engine.bowedStringGain) {
+    engine.bowedStringGain.disconnect();
+    engine.bowedStringGain = null;
+  }
+  engine.isBowedStringActive = false;
 
   engine.pitchShift?.dispose();
   engine.pitchShiftGain?.disconnect();
@@ -1543,51 +1648,89 @@ const BYPASS_CROSSFADE_TIME = 0.025;
 export function updateAudioParams(engine: AudioEngine, params: AudioParams): void {
   if (!engine.isRunning || !engine.gain) return;
 
-  // Pitch shift (used for velocity-driven vibrato)
-  if (engine.pitchShift) {
-    const target = ENABLE_VIBRATO ? params.pitchShift : 0;
-    // Smooth parameter changes to reduce "steppy" / glitchy artifacts.
-    // Tone's PitchShift.pitch is a Signal in practice, but keep this defensive.
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const p: any = (engine.pitchShift as any).pitch;
-    if (p && typeof p.rampTo === "function") {
-      p.rampTo(target, 0.03);
-    } else {
-      engine.pitchShift.pitch = target;
+  const isStrings = engine.instrumentMode === "strings" && engine.isBowedStringActive;
+
+  if (isStrings && engine.bowedStringNode) {
+    // === STRINGS MODE: drive the bowed string worklet ===
+    const ctx = Tone.getContext().rawContext;
+    const now = ctx.currentTime;
+
+    // Frequency: base frequency from params, modulated by vibrato (pitchShift in semitones)
+    const baseFreq = params.frequency ?? 220;
+    const vibratoSemitones = ENABLE_VIBRATO ? params.pitchShift : 0;
+    const freqWithVibrato = baseFreq * Math.pow(2, vibratoSemitones / 12);
+    const freqParam = engine.bowedStringNode.parameters.get("frequency");
+    if (freqParam) {
+      freqParam.setTargetAtTime(freqWithVibrato, now, 0.008);
     }
 
-    // PitchShift bypass logic: when vibrato is inactive, route through bypass for lower latency
-    const vibratoActive = ENABLE_VIBRATO && Math.abs(target) > VIBRATO_ACTIVE_THRESHOLD;
-    if (engine.pitchShiftGain && engine.bypassGain) {
-      const ctx = Tone.getContext().rawContext;
-      const now = ctx.currentTime;
+    // Bow velocity from gain (hand openness → gain in App.svelte, reinterpreted here)
+    const bowVelocityParam = engine.bowedStringNode.parameters.get("bowVelocity");
+    if (bowVelocityParam) {
+      bowVelocityParam.setTargetAtTime(params.gain, now, 0.005);
+    }
 
-      if (vibratoActive && !engine.pitchShiftActive) {
-        // Crossfade TO pitch shift path (vibrato just became active)
-        engine.pitchShiftActive = true;
-        engine.bypassGain.gain.setValueAtTime(engine.bypassGain.gain.value, now);
-        engine.bypassGain.gain.linearRampToValueAtTime(0, now + BYPASS_CROSSFADE_TIME);
-        engine.pitchShiftGain.gain.setValueAtTime(engine.pitchShiftGain.gain.value, now);
-        engine.pitchShiftGain.gain.linearRampToValueAtTime(1, now + BYPASS_CROSSFADE_TIME);
-        if (DEBUG_LATENCY) {
-          console.log(`[LATENCY] PitchShift ENGAGED (vibrato active)`);
-        }
-      } else if (!vibratoActive && engine.pitchShiftActive) {
-        // Crossfade TO bypass path (vibrato just became inactive)
-        engine.pitchShiftActive = false;
-        engine.pitchShiftGain.gain.setValueAtTime(engine.pitchShiftGain.gain.value, now);
-        engine.pitchShiftGain.gain.linearRampToValueAtTime(0, now + BYPASS_CROSSFADE_TIME);
-        engine.bypassGain.gain.setValueAtTime(engine.bypassGain.gain.value, now);
-        engine.bypassGain.gain.linearRampToValueAtTime(1, now + BYPASS_CROSSFADE_TIME);
-        if (DEBUG_LATENCY) {
-          console.log(`[LATENCY] PitchShift BYPASSED (lower latency)`);
+    // Bow force: derived from gain with a different curve
+    const bowForceParam = engine.bowedStringNode.parameters.get("bowForce");
+    if (bowForceParam) {
+      const force = 0.2 + params.gain * 0.6;
+      bowForceParam.setTargetAtTime(force, now, 0.01);
+    }
+
+    // Bow position from bowPosition param (jerkiness → bowPosition in App.svelte)
+    const bowPositionParam = engine.bowedStringNode.parameters.get("bowPosition");
+    if (bowPositionParam && params.bowPosition !== undefined) {
+      bowPositionParam.setTargetAtTime(params.bowPosition, now, 0.02);
+    }
+
+    // Dry gain at fixed level (worklet output varies naturally with bow velocity)
+    engine.gain.gain.rampTo(0.8, 0.015);
+
+  } else {
+    // === BRASS MODE (unchanged) ===
+
+    // Pitch shift (used for velocity-driven vibrato)
+    if (engine.pitchShift) {
+      const target = ENABLE_VIBRATO ? params.pitchShift : 0;
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const p: any = (engine.pitchShift as any).pitch;
+      if (p && typeof p.rampTo === "function") {
+        p.rampTo(target, 0.03);
+      } else {
+        engine.pitchShift.pitch = target;
+      }
+
+      // PitchShift bypass logic
+      const vibratoActive = ENABLE_VIBRATO && Math.abs(target) > VIBRATO_ACTIVE_THRESHOLD;
+      if (engine.pitchShiftGain && engine.bypassGain) {
+        const ctx = Tone.getContext().rawContext;
+        const now = ctx.currentTime;
+
+        if (vibratoActive && !engine.pitchShiftActive) {
+          engine.pitchShiftActive = true;
+          engine.bypassGain.gain.setValueAtTime(engine.bypassGain.gain.value, now);
+          engine.bypassGain.gain.linearRampToValueAtTime(0, now + BYPASS_CROSSFADE_TIME);
+          engine.pitchShiftGain.gain.setValueAtTime(engine.pitchShiftGain.gain.value, now);
+          engine.pitchShiftGain.gain.linearRampToValueAtTime(1, now + BYPASS_CROSSFADE_TIME);
+          if (DEBUG_LATENCY) {
+            console.log(`[LATENCY] PitchShift ENGAGED (vibrato active)`);
+          }
+        } else if (!vibratoActive && engine.pitchShiftActive) {
+          engine.pitchShiftActive = false;
+          engine.pitchShiftGain.gain.setValueAtTime(engine.pitchShiftGain.gain.value, now);
+          engine.pitchShiftGain.gain.linearRampToValueAtTime(0, now + BYPASS_CROSSFADE_TIME);
+          engine.bypassGain.gain.setValueAtTime(engine.bypassGain.gain.value, now);
+          engine.bypassGain.gain.linearRampToValueAtTime(1, now + BYPASS_CROSSFADE_TIME);
+          if (DEBUG_LATENCY) {
+            console.log(`[LATENCY] PitchShift BYPASSED (lower latency)`);
+          }
         }
       }
     }
-  }
 
-  // Update gain - slightly slower ramp to reduce jitter/pops
-  engine.gain.gain.rampTo(params.gain, 0.015);
+    // Update gain - slightly slower ramp to reduce jitter/pops
+    engine.gain.gain.rampTo(params.gain, 0.015);
+  }
   
   // Update filter cutoff for wah effect
   if (engine.filter) {
@@ -1600,10 +1743,20 @@ export function updateAudioParams(engine: AudioEngine, params: AudioParams): voi
     }
   }
   
-  // Update delay parameters (delay is currently bypassed)
+  // Update delay parameters (continuous timbre mapping)
   if (engine.delay && engine.delay.wet.value > 0) {
-    const delayTime = DELAY_MIN_TIME + Math.pow(params.delayTime, 3) * (DELAY_MAX_TIME - DELAY_MIN_TIME);
-    engine.delay.delayTime.rampTo(delayTime, 0.1);
+    // Map 0..1 onto a short range for timbral coloration (avoid long "echo tails").
+    const delayMin = 0.006;
+    const delayMax = 0.08;
+    const delayTime = delayMin + Math.pow(params.delayTime, 2.2) * (delayMax - delayMin);
+    engine.delay.delayTime.rampTo(delayTime, 0.08);
+
+    // Feedback is a Signal on Tone effects; ramp for smoothness.
+    const fb = Math.max(0, Math.min(0.75, 0.08 + 0.62 * params.feedback));
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const f: any = (engine.delay as any).feedback;
+    if (f && typeof f.rampTo === "function") f.rampTo(fb, 0.08);
+    else if (f && typeof f.value === "number") f.value = fb;
   }
 
   // Update reverb (mix + tail length)
@@ -1705,7 +1858,24 @@ export function setLayer(engine: AudioEngine, layer: ArticulationLayer): void {
 
 // Update instrument mode (brass vs strings)
 export function setInstrumentMode(engine: AudioEngine, mode: InstrumentMode): void {
+  const prevMode = engine.instrumentMode;
   engine.instrumentMode = mode;
+
+  if (!engine.isRunning) return;
+
+  if (mode === "strings" && prevMode !== "strings") {
+    // Stop any playing sample, switch to bowed string worklet
+    stopCurrentSound(engine);
+    engine.playState = "idle";
+    connectBowedString(engine);
+  } else if (mode !== "strings" && prevMode === "strings") {
+    // Silence the worklet, switch back to sample path
+    if (engine.bowedStringNode) {
+      const bv = engine.bowedStringNode.parameters.get("bowVelocity");
+      if (bv) bv.setValueAtTime(0, Tone.getContext().rawContext.currentTime);
+    }
+    disconnectBowedString(engine);
+  }
 }
 
 // Update pitch mode banding (low/mid/high)

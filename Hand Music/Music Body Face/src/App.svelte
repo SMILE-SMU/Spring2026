@@ -56,6 +56,7 @@
     prevVelocity: number;
     smoothedJerkiness: number;
     smoothedVelocity: number;
+    smoothedXVelocity: number; // normalized abs units/sec (EMA)
     smoothedPalmRotation: number;
     releaseStartTime: number;
     lastTimestamp: number;
@@ -95,6 +96,7 @@
       prevVelocity: 0,
       smoothedJerkiness: 0,
       smoothedVelocity: 0,
+      smoothedXVelocity: 0,
       smoothedPalmRotation: 0.5,
       releaseStartTime: 0,
       lastTimestamp: 0,
@@ -303,7 +305,7 @@
   // Vibrato (PitchShift) driven directly by Y-velocity (no LFO).
   // Only active when the hand is oscillating up/down quickly enough.
   // Tone.PitchShift expects semitones; we keep this in cents-scale.
-  const VIBRATO_MAX_CENTS = 8; // hard cap (very subtle)
+  const VIBRATO_MAX_CENTS = 50; // hard cap (quarter-tone depth)
   const VIBRATO_VEL_THRESHOLD = 0.38; // must be moving faster than this
   const VIBRATO_FLIP_HZ_THRESHOLD = 5.0; // must be oscillating up/down quickly
   const VIBRATO_FLIP_HZ_SMOOTH = 0.25; // EMA smoothing
@@ -338,12 +340,41 @@
   // Delay settings (velocity and rotation tracking)
   const VELOCITY_SMOOTHING = 0.1; // Faster velocity response
   const MAX_VELOCITY = 2.0;
+  // Horizontal velocity -> delay timbre (PingPongDelay)
+  const X_VELOCITY_SMOOTHING = 0.14;
+  const MAX_X_VELOCITY = 1.8; // normalized units/sec
   const ROTATION_SMOOTHING = 0.3; // Faster rotation response
 
   // Tracking robustness: briefly hold state when detection drops out.
   // This prevents "terrible behavior" in fast motion / low light.
   const TRACKING_LOSS_GRACE_MS = 600;
   const TRACKING_LOSS_MAX_HOLD_MS = 3000; // safety: eventually release to avoid stuck notes
+
+  // Strings mode: frequency mapping from hand Y position
+  // Each pitch mode uses a different Hz range for the physical model
+  const STRINGS_FREQ_RANGES: Record<PitchMode, { low: number; high: number }> = {
+    low:  { low: 65.41, high: 196.00 },   // C2 to G3 (cello low register)
+    mid:  { low: 130.81, high: 523.25 },   // C3 to C5 (cello mid register)
+    high: { low: 261.63, high: 1046.50 },  // C4 to C6 (upper register)
+    all:  { low: 65.41, high: 1046.50 },   // Full range C2 to C6
+  };
+
+  // Exponential mapping: hand Y to frequency (perceptually linear pitch)
+  function handYToFrequency(handY: number, mode: PitchMode): number {
+    const range = STRINGS_FREQ_RANGES[mode];
+    const t = 1 - Math.max(0, Math.min(1, handY)); // 0=bottom(low) → 1=top(high)
+    return range.low * Math.pow(range.high / range.low, t);
+  }
+
+  // Map jerkiness → bow position on the string
+  // Low jerkiness = sul tasto (near fingerboard, mellow tone)
+  // High jerkiness = sul ponticello (near bridge, harsh/brilliant)
+  function jerkinessToBowPosition(jerkiness: number): number {
+    return 0.14 - Math.max(0, Math.min(1, jerkiness)) * 0.10;
+  }
+
+  // Threshold for strings mode: bow velocity above this = "bowing" (trail active)
+  const BOW_TRAIL_THRESHOLD = 0.1;
   
   // Handlers
   async function handleStart(): Promise<void> {
@@ -412,9 +443,21 @@
     instrumentMode = instrumentMode === "brass" ? "strings" : "brass";
     audioComponent1?.setMode(instrumentMode);
     audioComponent2?.setMode(instrumentMode);
-    // Immediately swap samples so the mode switch is audible even if already playing
-    await audioComponent1?.changeSample();
-    await audioComponent2?.changeSample();
+
+    if (instrumentMode === "brass") {
+      // Switching to brass: load samples for playback
+      await audioComponent1?.changeSample();
+      await audioComponent2?.changeSample();
+    }
+    // Switching to strings: worklet is already connected by setMode
+
+    // Reset hand states to avoid stuck trails/state
+    for (const hs of Object.values(handStates)) {
+      hs.wasPlaying = false;
+      hs.isInRelease = false;
+    }
+    clearTrail("Left");
+    clearTrail("Right");
   }
 
   function togglePitchMode(): void {
@@ -480,6 +523,7 @@
     const dt = state.lastTimestamp > 0 ? (timestamp - state.lastTimestamp) / 1000 : 0.033;
     state.lastTimestamp = timestamp;
     let yVelocity = 0; // normalized units/sec (positive = moving down)
+    let xVelocityAbs = 0; // normalized abs units/sec
     
     if (state.prevHandPos && dt > 0) {
       const dx = currentPos.x - state.prevHandPos.x;
@@ -487,6 +531,7 @@
       const distance = Math.sqrt(dx * dx + dy * dy);
       const velocity = distance / dt;
       yVelocity = dy / dt;
+      xVelocityAbs = Math.abs(dx / dt);
       
       const acceleration = Math.abs(velocity - state.prevVelocity) / dt;
       const normalizedJerk = Math.min(1, acceleration / 30);
@@ -498,10 +543,15 @@
       } else {
         state.smoothedVelocity = 0.02 * normalizedVelocity + 0.98 * state.smoothedVelocity;
       }
+
+      // Horizontal velocity (abs) -> continuous timbre control (delay time)
+      const normalizedXVel = Math.min(1, xVelocityAbs / MAX_X_VELOCITY);
+      state.smoothedXVelocity = X_VELOCITY_SMOOTHING * normalizedXVel + (1 - X_VELOCITY_SMOOTHING) * state.smoothedXVelocity;
       
       state.prevVelocity = velocity;
     } else {
       state.smoothedVelocity *= 0.98;
+      state.smoothedXVelocity *= 0.98;
     }
     state.prevHandPos = currentPos;
     
@@ -628,13 +678,61 @@
     const isHandOpen = state.openConfirmMs >= OPEN_CONFIRM_MS;
     const isFistClosed = state.closedConfirmMs >= CLOSED_CONFIRM_MS;
     
+    // ====== STRINGS MODE: continuous bow control, no attack/release ======
+    if (instrumentMode === "strings") {
+      const bowVelocity = curvedGain;
+      const isBowing = bowVelocity > BOW_TRAIL_THRESHOLD;
+
+      // Trail management
+      if (isBowing && trails[controllerHandedness].phase !== "active") {
+        startTrail(controllerHandedness, palm.y);
+        reverbHold[controllerHandedness] = null;
+        state.reverbMixSmooth = 0;
+      } else if (!isBowing && trails[controllerHandedness].phase === "active") {
+        releaseTrail(controllerHandedness, timestamp);
+        const mapped = mapTrailToReverb(trails[controllerHandedness].lengthNorm);
+        reverbHold[controllerHandedness] = { startMs: timestamp, mix: mapped.mix, decay: mapped.decay };
+      }
+
+      if (isBowing) {
+        addTrailPoint(controllerHandedness, palm.x, palm.y, normalizedOpenness);
+      }
+
+      const frequency = handYToFrequency(state.smoothedHandYForPitch, pitchMode);
+      const bowPosition = jerkinessToBowPosition(state.smoothedJerkiness);
+      const filterCutoff = normalizedOpenness;
+      const delayTime = state.smoothedXVelocity;
+      const feedback = state.smoothedPalmRotation;
+      const rv = currentReverbFor(controllerHandedness, state, timestamp);
+
+      // Smooth bow velocity to reduce jitter
+      state.gainSmooth = 0.22 * bowVelocity + 0.78 * state.gainSmooth;
+
+      const computed: AudioParams = {
+        pitchShift,
+        gain: state.gainSmooth, // reinterpreted as bow velocity in the engine
+        filterCutoff,
+        delayTime,
+        feedback,
+        reverbMix: rv.reverbMix,
+        reverbDecay: rv.reverbDecay,
+        frequency,
+        bowPosition,
+      };
+
+      state.wasPlaying = isBowing;
+      state.isInRelease = false;
+      state.lastSeenMs = timestamp;
+      state.lastParams = computed;
+      return computed;
+    }
+
+    // ====== BRASS MODE: existing attack/release state machine (unchanged) ======
     let gain: number;
-    
+
     if (state.isInRelease) {
       gain = RELEASE_GAIN;
       const releaseElapsed = Date.now() - state.releaseStartTime;
-      // During release, allow immediate re-trigger — but ONLY if we actually detect the hand as open.
-      // (openConfirmMs is 0 when not open, so OPEN_CONFIRM_MS_RELEASE=0 alone would always be "true".)
       const isHandOpenForRelease = openCandidate && state.openConfirmMs >= OPEN_CONFIRM_MS_RELEASE;
       if (isHandOpenForRelease || releaseElapsed > RELEASE_TIMEOUT_MS) {
         state.isInRelease = false;
@@ -661,7 +759,7 @@
     // Gentle gain smoothing only (prevents audible jitter without latency).
     state.gainSmooth = 0.22 * gain + 0.78 * state.gainSmooth;
     gain = state.gainSmooth;
-    
+
     // State transitions (simple)
     if (isHandOpen && !state.wasPlaying && !state.isInRelease) {
       const gestureTime = performance.now();
@@ -687,7 +785,6 @@
     } else if (isFistClosed && state.wasPlaying) {
       console.log(`${controllerHandedness} → RELEASE`);
       releaseTrail(controllerHandedness, timestamp);
-      // Hold reverb settings from current trail length so tail rings out after release
       const mapped = mapTrailToReverb(trails[controllerHandedness].lengthNorm);
       reverbHold[controllerHandedness] = { startMs: timestamp, mix: mapped.mix, decay: mapped.decay };
       if (DEBUG_HAND) {
@@ -706,7 +803,7 @@
     }
 
     const filterCutoff = normalizedOpenness;
-    const delayTime = state.smoothedVelocity;
+    const delayTime = state.smoothedXVelocity;
     const feedback = state.smoothedPalmRotation;
 
     const rv = currentReverbFor(controllerHandedness, state, timestamp);
@@ -813,13 +910,14 @@
 
         // In single-hand mode, force the non-selected hand to be fully silent/idle.
         if (singleHandMode && handedness !== selectedHandedness) {
-          if (state.wasPlaying || state.isInRelease) {
+          if ((state.wasPlaying || state.isInRelease) && instrumentMode !== "strings") {
             audioComp?.release();
           }
           state.wasPlaying = false;
           state.isInRelease = false;
           state.releaseStartTime = 0;
           state.smoothedVelocity *= 0.9;
+          state.smoothedXVelocity *= 0.9;
           state.smoothedPalmRotation *= 0.95;
           state.smoothedOpenness = 0;
           state.openConfirmMs = 0;
@@ -881,9 +979,12 @@
           releaseTrail(handedness, timestamp);
           const mapped = mapTrailToReverb(trails[handedness].lengthNorm);
           reverbHold[handedness] = { startMs: timestamp, mix: mapped.mix, decay: mapped.decay };
-          audioComp?.release();
+          if (instrumentMode !== "strings") {
+            audioComp?.release();
+          }
+          // Strings mode: setting gain/bowVelocity to 0 (below) naturally damps the string
           state.wasPlaying = false;
-          state.isInRelease = true;
+          state.isInRelease = instrumentMode !== "strings";
           state.releaseStartTime = Date.now();
         }
         
@@ -897,6 +998,7 @@
         
         // Decay values
         state.smoothedVelocity *= 0.9;
+        state.smoothedXVelocity *= 0.9;
         state.smoothedPalmRotation *= 0.95;
         state.smoothedOpenness = 0;
         state.prevHandPos = null; // Reset position tracking
@@ -989,7 +1091,7 @@
       {/if}
 
       <button onclick={toggleInstrumentMode} disabled={isLoading}>
-        Mode: {instrumentMode === "brass" ? "Brass (Trombone)" : "Strings (Cello/Viola)"}
+        Mode: {instrumentMode === "brass" ? "Brass (Trombone)" : "Strings (Bowed)"}
       </button>
 
       <button onclick={togglePitchMode} disabled={isLoading}>
