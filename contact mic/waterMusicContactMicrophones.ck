@@ -76,7 +76,7 @@ limiter.limit(); //stop the clipping mayhem
 
 //set the gain, Q, & frequency of the bandpass filters smoothly, with no hiccup -- see class at end of code
 SmoothedFloat bpGain(5);
-SmoothedFloat bpQ;
+SmoothedFloat bpQ(15.0);
 FrequencyVibrato bpFreq(220, 10000); //make changes happen faster in frequency
 connectBP(); //connect the band pass filters to noise and gain
 
@@ -160,19 +160,20 @@ function keyboardAndMouseInput()
 {
 
     250::ms => dur note8th;
-    int whichKey;
-    if( USE_LAPTOP == 1 )
-    {
-        msg.ascii => whichKey;
-    }
-    else
-    {
-        msg.which => whichKey;
-    }
+    60 => int whichKey;
 
     // get message
     while( kb.recv( msg ) )
     {
+        if( USE_LAPTOP == 1 )
+        {
+            msg.ascii => whichKey;
+        }
+        else
+        {
+            msg.which => whichKey;
+        }
+        
         updateBP();
         //audioInEnvelope.last() * 100 => noise.gain; 
 
@@ -198,6 +199,10 @@ function keyboardAndMouseInput()
         MouseCursor.scaled().y => lastMouseY; 
         bpQ.set( 50*MouseCursor.scaled().x + 0.05 ); 
         <<< 50*MouseCursor.scaled().x + 0.05 >>>;
+    }
+    else
+    {
+        bpQ.set( 15.0 ); //fix for webchuck         
     }
     
     
