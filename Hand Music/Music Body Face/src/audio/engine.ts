@@ -929,7 +929,8 @@ export async function startAudio(engine: AudioEngine): Promise<void> {
   engine.sourceGain1 = sourceGain1;
   engine.sourceGain2 = sourceGain2;
   // Create bowed string worklet node (not connected to filter yet - brass is default)
-  const bowedStringNode = new AudioWorkletNode(ctx, BOWED_STRING_PROCESSOR_NAME, {
+  // Use Tone's createAudioWorkletNode to handle standardized-audio-context compatibility
+  const bowedStringNode = Tone.getContext().createAudioWorkletNode(BOWED_STRING_PROCESSOR_NAME, {
     numberOfInputs: 0,
     numberOfOutputs: 1,
     outputChannelCount: [1],

@@ -9,8 +9,29 @@
             "modernui": 1
         },
         "classnamespace": "box",
-        "rect": [ 635.0, 152.0, 1125.0, 855.0 ],
+        "rect": [ 569.0, 152.0, 1125.0, 855.0 ],
         "boxes": [
+            {
+                "box": {
+                    "id": "obj-11",
+                    "maxclass": "newobj",
+                    "numinlets": 1,
+                    "numoutlets": 0,
+                    "patching_rect": [ 769.0, 770.0, 151.0, 22.0 ],
+                    "text": "udpsend 192.168.1.2 4000"
+                }
+            },
+            {
+                "box": {
+                    "id": "obj-10",
+                    "maxclass": "number",
+                    "numinlets": 1,
+                    "numoutlets": 2,
+                    "outlettype": [ "", "bang" ],
+                    "parameter_enable": 0,
+                    "patching_rect": [ 675.0, 569.0, 50.0, 22.0 ]
+                }
+            },
             {
                 "box": {
                     "id": "obj-34",
@@ -424,6 +445,12 @@
             },
             {
                 "patchline": {
+                    "destination": [ "obj-42", 0 ],
+                    "source": [ "obj-10", 0 ]
+                }
+            },
+            {
+                "patchline": {
                     "destination": [ "obj-24", 0 ],
                     "source": [ "obj-12", 0 ]
                 }
@@ -568,7 +595,15 @@
             },
             {
                 "patchline": {
+                    "destination": [ "obj-11", 0 ],
+                    "order": 0,
+                    "source": [ "obj-42", 0 ]
+                }
+            },
+            {
+                "patchline": {
                     "destination": [ "obj-38", 0 ],
+                    "order": 1,
                     "source": [ "obj-42", 0 ]
                 }
             },
