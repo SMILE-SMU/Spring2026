@@ -146,12 +146,21 @@ function connectBP()
 
 //change the frequency of all the band-pass filters
 //uses the harmonic series to create a basic timbre via subtractive synthesis
-function changeFrequency(float freq)
+function changeFrequency(float f0)
 {
+    (SRATE * 0.49) => float fmax; //highest freq is the nyquist
+    
     for( 0=>int i; i<bp.size(); i++ )
     {
-        freq * (i+1) => bp[i].freq;
-    }   
+        f0 * (i+1) => float fi;
+        
+        if( fi > fmax )
+        {
+            0 => bp[i].gain; // disable this band
+            fmax => bp[i].freq; // keep it sane anyway
+        }
+        else fi => bp[i].freq;
+    }
 } 
 
 //---------------------------
@@ -193,12 +202,12 @@ function keyboardAndMouseInput()
     }
     if( USE_LAPTOP == 1 )
     {
-        MouseCursor.scaled().x - lastMouseX => deltaX; //not scaled... 
-        MouseCursor.scaled().y - lastMouseY => deltaY; //not scaled... 
-        MouseCursor.scaled().x => lastMouseX; 
-        MouseCursor.scaled().y => lastMouseY; 
-        bpQ.set( 50*MouseCursor.scaled().x + 0.05 ); 
-        <<< 50*MouseCursor.scaled().x + 0.05 >>>;
+        clamp(MouseCursor.scaled().x) - lastMouseX => deltaX; //not scaled... 
+        clamp(MouseCursor.scaled().y) - lastMouseY => deltaY; //not scaled... 
+        clamp(MouseCursor.scaled().x) => lastMouseX; 
+        clamp(MouseCursor.scaled().y) => lastMouseY; 
+        bpQ.set( clampTo(50*clamp(MouseCursor.scaled().x) + 0.2, 0.2, 50.0) ); 
+        <<< "Q:", 50*clamp(MouseCursor.scaled().x) + 0.2 >>>;
     }
     else
     {
@@ -232,30 +241,42 @@ function keyboardAndMouseInput()
 //this has to be written using updated Chuck for desktop/etc. using --> MouseCursor.xy(), MouseCursor.scaled()
 //or it will run in webchuck
 /*
-    while( hid.recv( msg2 ) )
+while( hid.recv( msg2 ) )
+{
+    // mouse motion
+    if( msg.isMouseMotion() )
     {
-        // mouse motion
-        if( msg.isMouseMotion() )
+        //map x to Q & y to volume
+        //bpQ.set( 500*msg.scaledCursorX + 30 ); //not doing this
+        //bpGain.set(Math.fabs( (1-msg.scaledCursorY)*4) ); //not doing this
+        
+        //map vibrato to mouse movement
+        //Take the power of the signal                                  
+        (Math.sqrt(msg.deltaY*msg.deltaY + msg.deltaX*msg.deltaX) / 5) => float vibrato;
+        Math.min(vibrato, 0.1*bpFreq.actualNote()) => vibrato; //limit vibrato to a 10% change in the note
+        if( msg.deltaX != 0 ) //fix for noise
         {
-            //map x to Q & y to volume
-            //bpQ.set( 500*msg.scaledCursorX + 30 ); //not doing this
-            //bpGain.set(Math.fabs( (1-msg.scaledCursorY)*4) ); //not doing this
-            
-            //map vibrato to mouse movement
-            //Take the power of the signal                                  
-            (Math.sqrt(msg.deltaY*msg.deltaY + msg.deltaX*msg.deltaX) / 5) => float vibrato;
-            Math.min(vibrato, 0.1*bpFreq.actualNote()) => vibrato; //limit vibrato to a 10% change in the note
-            if( msg.deltaX != 0 ) //fix for noise
-            {
-                vibrato * msg.deltaX/msg.deltaX => vibrato; //add back direction
-            }
-            bpFreq.vibrato(msg.deltaX/25);
-            <<<"mousemovement!! mouse deltaX:", msg.deltaX >>>;
+            vibrato * msg.deltaX/msg.deltaX => vibrato; //add back direction
         }
+        bpFreq.vibrato(msg.deltaX/25);
+        <<<"mousemovement!! mouse deltaX:", msg.deltaX >>>;
     }
+}
 */
 }
+
+function float clamp(float v)
+{
+    return clampTo(v, 0, 1);
+}
     
+    
+function float clampTo(float v, float lo, float hi)
+{
+    if(v < lo) return lo;
+    if(v > hi) return hi;
+    return v;
+}    
 //---------------------------
 
 //modify the gain of bandpass filters
