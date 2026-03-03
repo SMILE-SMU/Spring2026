@@ -9,26 +9,71 @@
             "modernui": 1
         },
         "classnamespace": "box",
-        "rect": [ 182.0, 94.0, 1280.0, 970.0 ],
+        "rect": [ 182.0, 94.0, 1014.0, 970.0 ],
         "boxes": [
             {
                 "box": {
-                    "id": "obj-8",
-                    "linecount": 7,
+                    "id": "obj-23",
                     "maxclass": "comment",
                     "numinlets": 1,
                     "numoutlets": 0,
-                    "patching_rect": [ 118.0, 61.0, 216.0, 100.0 ],
-                    "text": "Courtney Brown\nFeb. 2026\nSubtractive synthesis via contact microphones\nDoes most but not all the things as the chuck code.\nDoes a little more."
+                    "patching_rect": [ 438.0, 841.0, 150.0, 20.0 ],
+                    "text": "use a midi controller"
+                }
+            },
+            {
+                "box": {
+                    "id": "obj-19",
+                    "maxclass": "newobj",
+                    "numinlets": 1,
+                    "numoutlets": 1,
+                    "outlettype": [ "" ],
+                    "patching_rect": [ 395.0, 917.0, 32.0, 22.0 ],
+                    "text": "mtof"
+                }
+            },
+            {
+                "box": {
+                    "id": "obj-17",
+                    "maxclass": "newobj",
+                    "numinlets": 2,
+                    "numoutlets": 2,
+                    "outlettype": [ "int", "int" ],
+                    "patching_rect": [ 383.0, 881.0, 55.0, 22.0 ],
+                    "text": "stripnote"
+                }
+            },
+            {
+                "box": {
+                    "id": "obj-8",
+                    "maxclass": "newobj",
+                    "numinlets": 1,
+                    "numoutlets": 2,
+                    "outlettype": [ "int", "int" ],
+                    "patching_rect": [ 383.0, 840.0, 47.0, 22.0 ],
+                    "text": "unpack"
                 }
             },
             {
                 "box": {
                     "id": "obj-4",
-                    "maxclass": "comment",
+                    "maxclass": "newobj",
                     "numinlets": 1,
-                    "numoutlets": 0,
-                    "patching_rect": [ 480.0, 141.0, 150.0, 20.0 ]
+                    "numoutlets": 8,
+                    "outlettype": [ "", "", "", "int", "int", "", "int", "" ],
+                    "patching_rect": [ 383.0, 806.0, 92.5, 22.0 ],
+                    "text": "midiparse"
+                }
+            },
+            {
+                "box": {
+                    "id": "obj-3",
+                    "maxclass": "newobj",
+                    "numinlets": 1,
+                    "numoutlets": 1,
+                    "outlettype": [ "int" ],
+                    "patching_rect": [ 383.0, 767.0, 40.0, 22.0 ],
+                    "text": "midiin"
                 }
             },
             {
@@ -67,12 +112,13 @@
             {
                 "box": {
                     "id": "obj-9",
+                    "linecount": 2,
                     "maxclass": "message",
                     "numinlets": 2,
                     "numoutlets": 1,
                     "outlettype": [ "" ],
-                    "patching_rect": [ 767.0, 423.0, 50.0, 22.0 ],
-                    "text": "10."
+                    "patching_rect": [ 767.0, 423.0, 50.0, 35.0 ],
+                    "text": "0.738966"
                 }
             },
             {
@@ -457,6 +503,17 @@
                         "classnamespace": "box",
                         "rect": [ 59.0, 113.0, 1226.0, 922.0 ],
                         "boxes": [
+                            {
+                                "box": {
+                                    "id": "obj-2",
+                                    "linecount": 4,
+                                    "maxclass": "comment",
+                                    "numinlets": 1,
+                                    "numoutlets": 0,
+                                    "patching_rect": [ 673.0, 421.0, 215.0, 60.0 ],
+                                    "text": "C harmonic minor scale:         \n60, 62, 63, 65, 67, 68, 71, 72, 74,\n72, 74, 75, 77, 79, 80, 83, 84, 86, 87,\n 48, 50, 51, 53, 55, 56, 59, 60"
+                                }
+                            },
                             {
                                 "box": {
                                     "id": "obj-39",
@@ -1471,7 +1528,7 @@
                     "numinlets": 1,
                     "numoutlets": 1,
                     "outlettype": [ "" ],
-                    "patching_rect": [ 116.0, 486.0, 32.0, 22.0 ],
+                    "patching_rect": [ 116.0, 493.0, 32.0, 22.0 ],
                     "text": "mtof"
                 }
             },
@@ -1547,12 +1604,12 @@
             {
                 "box": {
                     "id": "obj-82",
-                    "linecount": 10,
+                    "linecount": 3,
                     "maxclass": "comment",
                     "numinlets": 1,
                     "numoutlets": 0,
-                    "patching_rect": [ 960.0, 46.0, 382.0, 154.0 ],
-                    "text": "Author: Courtney Brown\nDate: Feb. 2025, modified 2026\nDesc: Example of subtractive synthesis using microphone input. I've been using water since I have hydrophones -- so fun!!\n\nNote: let me know next class if you want to do a performance with the microphone instead of a set 1-2 min. piece. \n\nYou'll have to meet all the rest of the rubrics, except for the stuff about creating a piece with bang, etc.\n"
+                    "patching_rect": [ 116.0, 32.0, 382.0, 47.0 ],
+                    "text": "Author: Courtney Brown\nDate: Feb. 2025, modified 2026\nDesc: Example of subtractive synthesis using microphone input."
                 }
             },
             {
@@ -1582,7 +1639,7 @@
                     "numinlets": 1,
                     "numoutlets": 4,
                     "outlettype": [ "signal", "signal", "signal", "signal" ],
-                    "patching_rect": [ 251.0, 686.0, 50.5, 22.0 ],
+                    "patching_rect": [ 272.0, 684.0, 50.5, 22.0 ],
                     "text": "fffb~"
                 }
             },
@@ -1595,17 +1652,6 @@
                     "outlettype": [ "int" ],
                     "parameter_enable": 0,
                     "patching_rect": [ 314.0, 338.0, 24.0, 24.0 ]
-                }
-            },
-            {
-                "box": {
-                    "id": "obj-2",
-                    "linecount": 4,
-                    "maxclass": "comment",
-                    "numinlets": 1,
-                    "numoutlets": 0,
-                    "patching_rect": [ 326.0, 415.0, 210.0, 60.0 ],
-                    "text": "C harmonic minor scale:         \n60, 62, 63, 65, 67, 68, 71, 72, 74,\n72, 74, 75, 77, 79, 80, 83, 84, 86, 87,\n 48, 50, 51, 53, 55, 56, 59, 60"
                 }
             }
         ],
@@ -1639,7 +1685,22 @@
             {
                 "patchline": {
                     "destination": [ "obj-60", 0 ],
+                    "midpoints": [ 739.5, 804.0, 486.0, 804.0, 486.0, 672.0, 281.5, 672.0 ],
                     "source": [ "obj-16", 0 ]
+                }
+            },
+            {
+                "patchline": {
+                    "destination": [ "obj-19", 0 ],
+                    "source": [ "obj-17", 0 ]
+                }
+            },
+            {
+                "patchline": {
+                    "color": [ 0.4117431938648224, 0.21271133422851562, 0.46087801456451416, 1.0 ],
+                    "destination": [ "obj-26", 0 ],
+                    "midpoints": [ 404.5, 954.8984375, 333.0, 954.8984375, 333.0, 483.0, 125.5, 483.0 ],
+                    "source": [ "obj-19", 0 ]
                 }
             },
             {
@@ -1668,14 +1729,28 @@
             },
             {
                 "patchline": {
+                    "destination": [ "obj-4", 0 ],
+                    "source": [ "obj-3", 0 ]
+                }
+            },
+            {
+                "patchline": {
                     "destination": [ "obj-60", 0 ],
+                    "midpoints": [ 318.5, 672.0, 281.5, 672.0 ],
                     "source": [ "obj-38", 0 ]
                 }
             },
             {
                 "patchline": {
                     "destination": [ "obj-60", 0 ],
+                    "midpoints": [ 125.5, 621.0, 281.5, 621.0 ],
                     "source": [ "obj-39", 0 ]
+                }
+            },
+            {
+                "patchline": {
+                    "destination": [ "obj-8", 0 ],
+                    "source": [ "obj-4", 0 ]
                 }
             },
             {
@@ -1777,14 +1852,26 @@
             {
                 "patchline": {
                     "destination": [ "obj-60", 0 ],
-                    "midpoints": [ 680.5, 672.0, 260.5, 672.0 ],
+                    "midpoints": [ 680.5, 672.0, 281.5, 672.0 ],
                     "source": [ "obj-78", 0 ]
                 }
             },
             {
                 "patchline": {
+                    "destination": [ "obj-17", 1 ],
+                    "source": [ "obj-8", 1 ]
+                }
+            },
+            {
+                "patchline": {
+                    "destination": [ "obj-17", 0 ],
+                    "source": [ "obj-8", 0 ]
+                }
+            },
+            {
+                "patchline": {
                     "destination": [ "obj-60", 0 ],
-                    "midpoints": [ 776.5, 567.0, 260.5, 567.0 ],
+                    "midpoints": [ 776.5, 545.47265625, 281.5, 545.47265625 ],
                     "source": [ "obj-9", 0 ]
                 }
             }
